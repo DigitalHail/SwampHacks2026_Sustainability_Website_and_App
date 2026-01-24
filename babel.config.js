@@ -1,11 +1,8 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ["babel-preset-expo"],
-    plugins: [
-      "nativewind/babel",
-      ["@babel/plugin-transform-react-jsx", { runtime: "automatic" }],
-    ],
+    presets: ["babel-preset-expo", "nativewind/babel"],
+    plugins: [["@babel/plugin-transform-react-jsx", { runtime: "automatic" }]],
   };
 };
 
