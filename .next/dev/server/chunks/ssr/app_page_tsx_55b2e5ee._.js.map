@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["C:/Users/dskal/.vscode/GatorGreen/app/page.tsx"],"sourcesContent":["\"use client\";\r\n\r\nexport default function Index() {\r\n  return (\r\n    <div className=\"min-h-screen flex items-center justify-center bg-white\">\r\n      <h1 className=\"text-xl font-bold\">Welcome to GatorGreen</h1>\r\n    </div>\r\n  );\r\n}\r\n"],"names":["Index"],"mappings":";;;;;AAAA,YAAY;;AAEG,SAASA,KAAKA,CAAA,EAAG;IAC9B,qBACE,8OAAC,GAAG;QAAC,SAAS,EAAC,wDAAwD,CAAC;gCACtE,8OAAC,EAAE;YAAC,SAAS,EAAC,mBAAmB;sBAAC,qBAAqB,EAAE,EAAE,CAAC;;;;;;;;;;;AAGlE","ignoreList":[]}}]
-}

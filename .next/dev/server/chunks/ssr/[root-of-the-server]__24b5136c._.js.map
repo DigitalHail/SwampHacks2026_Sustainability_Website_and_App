@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["C:/Users/dskal/.vscode/GatorGreen/app/providers.tsx"],"sourcesContent":["\"use client\";\r\n\r\nimport { QueryClient, QueryClientProvider } from \"@tanstack/react-query\";\r\nimport { ReactNode } from \"react\";\r\n\r\nconst queryClient = new QueryClient();\r\n\r\nexport function Providers({ children }: { children: ReactNode }) {\r\n  return (\r\n    <QueryClientProvider client={queryClient}>\r\n      {children}\r\n    </QueryClientProvider>\r\n  );\r\n}\r\n"],"names":["QueryClient","QueryClientProvider","ReactNode","queryClient","Providers","children"],"mappings":";;;;;;AAEA,SAASA,WAAW,EAAEC,mBAAmB,QAAQ,uBAAuB;AAFxE,YAAY;;;AAKZ,MAAME,WAAW,GAAG,IAAIH,4LAAW,CAAC,CAAC;AAE9B,SAASI,SAASA,CAAC,EAAEC,QAAAA,EAAmC,EAAE;IAC/D,qBACE,8OAAC,6MAAmB;QAAC,MAAM,CAAC,CAACF,WAAW,CAAC,CAAC;kBACvCE,QAAQ,CAAC;;;;;;AAGhB","ignoreList":[]}}]
-}

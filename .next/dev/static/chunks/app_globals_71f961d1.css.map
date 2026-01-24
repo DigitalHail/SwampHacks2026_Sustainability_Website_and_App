@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 1, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/dskal/.vscode/GatorGreen/app/globals.css"],"sourcesContent":["@tailwind base;\r\n@tailwind components;\r\n@tailwind utilities;\r\n\r\nhtml,\r\nbody {\r\n  margin: 0;\r\n  padding: 0;\r\n  height: 100%;\r\n  width: 100%;\r\n}\r\n\r\n#__next {\r\n  display: flex;\r\n  height: 100%;\r\n}\r\n"],"names":[],"mappings":"AAAA;;AACA;;AACA;;AAEA;;;;;;;AAQA"}}]
-}

@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/ariellaefraim/SwampHacks2026_Sustainability_Website_and_App/pages/settings.tsx"],"sourcesContent":["export default function Settings() {\n  return (\n    <main className=\"min-h-screen flex items-center justify-center bg-white p-6\">\n      <h1 className=\"text-2xl\">Settings</h1>\n    </main>\n  )\n}\n"],"names":["Settings"],"mappings":";;;;;;AAAe,SAASA,QAAQA,CAAA,EAAG;IACjC,qBACE,qKAAC,IAAI;QAAC,SAAS,EAAC,4DAA4D;gCAC1E,qKAAC,EAAE;YAAC,SAAS,EAAC,UAAU;sBAAC,QAAQ,EAAE,EAAE;;;;;;;;;;;AAG3C","ignoreList":[]}}]
+}
