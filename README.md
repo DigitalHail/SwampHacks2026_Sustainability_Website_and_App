@@ -1,0 +1,1 @@
+This is the repository for developing our current project the directory structure is purposely split so that way we can divide and conquer which is known to be the most convenient method of collaborative work in our industry
