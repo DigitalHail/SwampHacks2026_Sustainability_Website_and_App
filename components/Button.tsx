@@ -1,17 +1,17 @@
-import { Pressable, Text } from "react-native";
+"use client";
 
 type Props = {
   title: string;
-  onPress: () => void;
+  onClick: () => void;
 };
 
-export function Button({ title, onPress }: Props) {
+export function Button({ title, onClick }: Props) {
   return (
-    <Pressable
-      onPress={onPress}
-      className="px-4 py-3 bg-black rounded-xl"
+    <button
+      onClick={onClick}
+      className="px-4 py-3 bg-black text-white rounded-xl font-semibold hover:bg-gray-800 transition"
     >
-      <Text className="text-white font-semibold">{title}</Text>
-    </Pressable>
+      {title}
+    </button>
   );
 }

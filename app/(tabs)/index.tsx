@@ -1,9 +1,9 @@
-import { Text, View } from "react-native";
+"use client";
 
 export default function HomeScreen() {
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Text className="text-xl font-bold">Home</Text>
-    </View>
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <h1 className="text-xl font-bold">Home</h1>
+    </div>
   );
 }
