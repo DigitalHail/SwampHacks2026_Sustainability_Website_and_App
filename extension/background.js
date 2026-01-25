@@ -102,16 +102,17 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     }
 
     try {
-      // Evaluate sustainability using Climatiq (with fallback to keywords)
-      console.log("🌱 [WattWise Background] Evaluating sustainability...");
-      const evaluation = await evaluateSustainability(message.name);
-      console.log("✅ [WattWise Background] Sustainability evaluation:", evaluation);
-      
+      // Get repairability score first so we can use it in sustainability evaluation
       const repairability = await getRepairabilityScore(
         message.name,
         data.enableIfixit,
         data.ifixitCache || {}
       );
+
+      // Evaluate sustainability using Climatiq + Gemini (with fallback to keywords)
+      console.log("🌱 [WattWise Background] Evaluating sustainability...");
+      const evaluation = await evaluateSustainability(message.name, repairability.data);
+      console.log("✅ [WattWise Background] Sustainability evaluation:", evaluation);
 
       const budgetStatus = await updateMonthlyBudget(
         evaluation.emissions || 0,
@@ -226,11 +227,12 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 });
 
 /**
- * Evaluate product sustainability using Climatiq API
+ * Evaluate product sustainability using Climatiq API + Gemini for intelligent scoring
  * @param {string} productName - Name of the product
+ * @param {object} repairability - Optional repairability data from iFixit
  * @returns {Promise<object>} Sustainability score and tax amount
  */
-async function evaluateSustainability(productName) {
+async function evaluateSustainability(productName, repairability = null) {
   try {
     // If no Climatiq key, fall back to keyword matching
     if (!CLIMATIQ_API_KEY) {
@@ -249,42 +251,87 @@ async function evaluateSustainability(productName) {
 
     console.log("🌍 Evaluating sustainability via Climatiq for:", productName);
     
-    // Call Climatiq API to evaluate product
-    const response = await fetch(CLIMATIQ_BASE_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${CLIMATIQ_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        // Climatiq expects activity data
-        // Using a generic "goods" category with the product name
-        emission_factor: {
-          activity_id: "product:generic",
-          source: "IPCC"
+    try {
+      // Call Climatiq API to evaluate product
+      // Using a simple electronics/goods estimate
+      const response = await fetch(CLIMATIQ_BASE_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${CLIMATIQ_API_KEY}`,
+          'Content-Type': 'application/json'
         },
-        parameters: {
-          weight_kg: 1,
-          description: productName
-        }
-      })
-    });
+        body: JSON.stringify({
+          emission_factor: {
+            activity_id: "consumer_goods-type_electronics",
+            source: "IPCC",
+            region: "US",
+            data_version: "30.30"
+          },
+          parameters: {
+            weight_kg: 0.5
+          }
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error(`Climatiq API returned ${response.status}`);
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.warn("🌍 Climatiq API error:", response.status, errorData);
+        throw new Error(`Climatiq API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("🌍 Climatiq response:", data);
+
+      const emissions = data.co2e || 2; // Default to 2 if not available
+    } catch (climatiqError) {
+      console.warn("🌍 Climatiq API failed, using keyword-based estimate:", climatiqError.message);
+      // Fallback to keyword-based estimation
+      const isKeywordUnsustainable = productName.toLowerCase().includes("plastic") || 
+                                     productName.toLowerCase().includes("disposable") ||
+                                     productName.toLowerCase().includes("single-use");
+      const emissions = isKeywordUnsustainable ? 5 : 1.5;
+      
+      // Calculate score based on keywords
+      let score = 100 - (emissions * 15);
+      score = Math.max(0, Math.min(100, score));
+      
+      const taxAmount = Math.min(5.00, (emissions / 10) || 1.50);
+      return {
+        isUnsustainable: score < 50,
+        score: Math.round(score),
+        emissions: emissions,
+        reason: "Estimate based on product category (Climatiq API unavailable)",
+        taxAmount: Math.round(taxAmount * 100) / 100
+      };
+    }
+    
+    // If we get here, we have emissions from Climatiq
+    const emissions = data.co2e || 1.5;
+    
+    // Use Gemini to calculate intelligent sustainability score
+    if (GEMINI_API_KEY && repairability && repairability.score !== null) {
+      console.log("🤖 Using Gemini to calculate intelligent sustainability score...");
+      const score = await calculateGeminiSustainabilityScore(productName, emissions, repairability);
+      
+      if (score !== null) {
+        const taxAmount = Math.min(5.00, (emissions / 10) || 1.50);
+        return {
+          isUnsustainable: score < 50,
+          score: Math.round(score),
+          emissions: emissions,
+          reason: score < 50 ? `Sustainability score: ${Math.round(score)}/100 (considering carbon footprint and repairability)` : `Sustainability score: ${Math.round(score)}/100 (good environmental choice)`,
+          taxAmount: Math.round(taxAmount * 100) / 100,
+          usedGemini: true
+        };
+      }
     }
 
-    const data = await response.json();
-    console.log("🌍 Climatiq response:", data);
-
-    // Score based on carbon emissions
-    // Lower emissions = higher score (more sustainable)
-    const emissions = data.co2e || 0;
+    // Fallback: Score based on carbon emissions alone
+    console.log("📊 Falling back to emissions-based scoring");
     let score = 100 - (emissions * 10); // Simple scoring
     score = Math.max(0, Math.min(100, score)); // Clamp 0-100
 
     // Tax based on carbon footprint
-    // Higher emissions = higher tax (incentivizes sustainable choices)
     const taxAmount = Math.min(5.00, (emissions / 10) || 1.50); // Max $5 tax
 
     return {
@@ -307,6 +354,95 @@ async function evaluateSustainability(productName) {
       reason: "Using fallback sustainability assessment",
       taxAmount: isUnsustainable ? 1.50 : 0
     };
+  }
+}
+
+/**
+ * Use Gemini to calculate an intelligent sustainability score
+ * Combines emissions data with repairability score
+ */
+async function calculateGeminiSustainabilityScore(productName, emissions, repairability) {
+  if (!GEMINI_API_KEY) {
+    return null;
+  }
+
+  try {
+    const repairScore = repairability.score || 0;
+    const repairContext = repairability.score 
+      ? `This product has a repairability score of ${repairability.score}/10 from iFixit, meaning ${repairability.score >= 7 ? 'it is very easy to repair and maintain' : repairability.score >= 4 ? 'it is moderately repairable' : 'it is difficult to repair'}.`
+      : "No repairability data available for this product.";
+
+    const prompt = `You are a sustainability expert. Calculate a sustainability score (0-100) for this product based on both its carbon footprint AND repairability.
+
+Product: ${productName}
+Carbon Footprint: ${emissions} kg CO2e
+${repairContext}
+
+Consider:
+- Lower carbon footprint = higher score (up to 60% weight)
+- Higher repairability = higher score (up to 40% weight)
+- Repairable products last longer, reducing overall lifecycle emissions
+
+Return ONLY a JSON object with this exact format:
+{"score": <number 0-100>, "reasoning": "<brief explanation>"}`;
+
+    console.log("🤖 Calling Gemini for sustainability score calculation...");
+    const requestUrl = `${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`;
+    
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          maxOutputTokens: 100,
+          temperature: 0.5
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn("🤖 Gemini score calculation error:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!text) {
+      console.warn("🤖 No response from Gemini");
+      return null;
+    }
+
+    // Parse JSON response
+    let cleanedText = text.trim();
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.slice(7);
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.slice(3);
+    }
+    if (cleanedText.endsWith("```")) {
+      cleanedText = cleanedText.slice(0, -3);
+    }
+    cleanedText = cleanedText.trim();
+
+    try {
+      const result = JSON.parse(cleanedText);
+      const score = Math.max(0, Math.min(100, Number(result.score) || 50));
+      console.log("🤖 Gemini calculated score:", score, "Reasoning:", result.reasoning);
+      return score;
+    } catch (parseError) {
+      console.warn("🤖 Could not parse Gemini score response:", cleanedText);
+      return null;
+    }
+  } catch (error) {
+    console.warn("🤖 Gemini score calculation failed:", error.message);
+    return null;
   }
 }
 
