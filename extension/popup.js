@@ -417,54 +417,6 @@ function initButtonListeners() {
     });
   }
 
-  // Check balance button
-  const checkBalanceBtn = document.getElementById('checkBalance');
-  if (checkBalanceBtn) {
-    checkBalanceBtn.addEventListener('click', async () => {
-      try {
-        const balanceSection = document.getElementById('balanceSection');
-        
-        // Toggle: if already showing, hide it
-        if (balanceSection.style.display === 'block') {
-          balanceSection.style.display = 'none';
-          return;
-        }
-        
-        // Get stored account IDs
-        const data = await chrome.storage.local.get(['apiKey', 'mainAccount', 'savingsAccount']);
-        const apiKey = data.apiKey;
-        const mainAccountId = data.mainAccount;
-        const savingsAccountId = data.savingsAccount;
-        
-        if (!apiKey || !mainAccountId || !savingsAccountId) {
-          showStatus('❌ Please configure accounts in settings first', 'error');
-          return;
-        }
-        
-        // Fetch account details from background script
-        const response = await chrome.runtime.sendMessage({
-          type: 'GET_ACCOUNT_DETAILS',
-          apiKey: apiKey,
-          mainAccountId: mainAccountId,
-          savingsAccountId: savingsAccountId
-        });
-        
-        if (response?.success) {
-          // Display balances
-          document.getElementById('mainBalance').textContent = (response.mainBalance || 0).toFixed(2);
-          document.getElementById('savingsBalance').textContent = (response.savingsBalance || 0).toFixed(2);
-          document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
-          balanceSection.style.display = 'block';
-          showStatus('✓ Balances updated!', 'success');
-        } else {
-          showStatus('❌ Error: ' + (response?.error || 'Unknown error'), 'error');
-        }
-      } catch (error) {
-        showStatus('❌ Error: ' + error.message, 'error');
-      }
-    });
-  }
-
   // Clear iFixit cache button
   const clearCacheBtn = document.getElementById('clearIfixitCache');
   if (clearCacheBtn) {
@@ -482,7 +434,6 @@ function initButtonListeners() {
   console.log('🔘 [WattWise Popup] Button listeners initialized:', {
     saveSettings: !!document.getElementById('saveSettings'),
     testAPI: !!document.getElementById('testAPI'),
-    checkBalance: !!document.getElementById('checkBalance'),
     clearCache: !!clearCacheBtn
   });
 }
