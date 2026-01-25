@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body { 
+        width: 300px; 
+        font-family: sans-serif; 
+        padding: 10px;
+      }
+      input { 
+        width: 100%; 
+        padding: 5px; 
+        margin: 5px 0;
+        box-sizing: border-box;
+      }
+      button {
+        background-color: #4CAF50;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px 0;
+        width: 100%;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      #toggleSettings {
+        background-color: #f0f0f0;
+        color: #333;
+        padding: 10px;
+        margin: 10px 0 5px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        text-align: left;
+        font-weight: bold;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      #toggleSettings:hover {
+        background-color: #e8e8e8;
+        color: #000;
+      }
+      .settings-icon {
+        display: inline-block;
+        width: 20px;
+        text-align: center;
+      }
+      .settings-section {
+        border: 1px solid #ddd;
+        margin-top: 0;
+        padding: 10px;
+        border-radius: 0 0 4px 4px;
+        background-color: #fafafa;
+        max-height: 500px;
+        overflow: hidden;
+        transition: opacity 0.3s ease;
+        opacity: 1;
+      }
+      .settings-section.hidden {
+        max-height: 0;
+        opacity: 0;
+        padding: 0 10px;
+        overflow: hidden;
+        visibility: hidden;
+      }
+      .status {
+        padding: 8px;
+        margin: 5px 0;
+        border-radius: 4px;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      #impactSection {
+        border: 2px solid #ff9800;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+        background-color: #fff3e0;
+      }
+      #impactSection.unsustainable {
+        background-color: #ffebee;
+        border-color: #f44336;
+      }
+      #impactSection h4 {
+        margin: 0 0 8px 0;
+        color: #d32f2f;
+      }
+      #impactSection.sustainable h4 {
+        color: #2e7d32;
+      }
+      .impact-text {
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>🌍 WattWise</h3>
+    <p id="status">Scanning page...</p>
+    <button id="checkBalance">View Eco-Balance</button>
+    
+    <div id="balanceSection" style="display:none; border: 2px solid #4CAF50; padding: 10px; margin: 10px 0; border-radius: 4px; background-color: #f0f8f0;">
+      <h4>💰 Account Balance</h4>
+      <p><strong>Main Checking:</strong> $<span id="mainBalance">0.00</span></p>
+      <p><strong>Sustainability Savings:</strong> $<span id="savingsBalance">0.00</span></p>
+      <p style="font-size: 12px; color: #666;">Last updated: <span id="lastUpdated">-</span></p>
+    </div>
+    
+    <div id="impactSection" style="display:none;">
+      <h4>⚠️ Sustainability Impact</h4>
+      <div class="impact-text">
+        <p id="impactMessage"></p>
+        <p id="impactPreview" style="font-weight: bold; margin: 8px 0 0 0;"></p>
+      </div>
+    </div>
+    
+    <button id="toggleSettings">
+      <span>⚙️ Settings</span>
+      <span class="settings-icon">▼</span>
+    </button>
+    
+    <div id="settingsPanel" class="settings-section hidden">
+      <label>Nessie API Key:</label>
+      <input type="password" id="apiKey" placeholder="Enter API key">
+      
+      <label>Main Account ID:</label>
+      <input type="text" id="mainAccount" placeholder="Your checking account ID">
+      
+      <label>Sustainability Savings Account ID:</label>
+      <input type="text" id="savingsAccount" placeholder="Your savings account ID (for sustainability tax)">
+      
+      <label>Climatiq API Key:</label>
+      <input type="password" id="climatiqKey" placeholder="Get free key at climatiq.io">
+      
+      <button id="saveSettings">Save Settings</button>
+      <button id="testAPI">Test API Connection</button>
+      <div id="settingsStatus"></div>
+    </div>
+    
+    <script src="popup.js"></script>
+  </body>
+</html>
