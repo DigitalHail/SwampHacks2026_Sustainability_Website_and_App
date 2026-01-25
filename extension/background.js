@@ -820,40 +820,31 @@ async function evaluateSustainability(productName, repairability = null) {
 
       const emissions = data.co2e || 2; // Default to 2 if not available
     } catch (climatiqError) {
-      console.warn("🌍 Climatiq API failed, using keyword-based estimate:", climatiqError.message);
-      // Fallback to keyword-based estimation
-      const isKeywordUnsustainable = productName.toLowerCase().includes("plastic") || 
-                                     productName.toLowerCase().includes("disposable") ||
-                                     productName.toLowerCase().includes("single-use");
+      console.warn("🌍 Climatiq API failed, attempting Gemini carbon footprint estimation:", climatiqError.message);
       
-      // Score calculation for keyword-based fallback
-      // Sustainable products: 70-85 (vary based on keywords present)
-      // Unsustainable products: 15-40 (vary based on negative keywords)
-      let score;
-      let emissions;
-      
-      if (isKeywordUnsustainable) {
-        // Unsustainable: starts at 35, reduced based on keyword count
-        const negativeKeywordCount = 
-          (productName.toLowerCase().includes("plastic") ? 1 : 0) +
-          (productName.toLowerCase().includes("disposable") ? 1 : 0) +
-          (productName.toLowerCase().includes("single-use") ? 1 : 0);
-        score = Math.max(15, 35 - (negativeKeywordCount * 5));
-        emissions = 5;
-      } else {
-        // Sustainable: starts at 75, increased based on positive indicators
-        const positiveKeywordCount = 
-          (productName.toLowerCase().includes("organic") ? 1 : 0) +
-          (productName.toLowerCase().includes("recycled") ? 1 : 0) +
-          (productName.toLowerCase().includes("eco") ? 1 : 0) +
-          (productName.toLowerCase().includes("green") ? 1 : 0) +
-          (productName.toLowerCase().includes("natural") ? 1 : 0) +
-          (productName.toLowerCase().includes("reusable") ? 1 : 0);
-        score = Math.min(95, 75 + (positiveKeywordCount * 3));
-        emissions = 1.5;
+      // Try to use Gemini to estimate carbon footprint for tech products
+      let emissions = null;
+      if (GEMINI_API_KEY) {
+        try {
+          emissions = await estimateTechProductCarbonFootprint(productName);
+          console.log("🤖 Gemini estimated carbon footprint:", emissions, "kg CO2e");
+        } catch (geminiError) {
+          console.warn("🤖 Gemini estimation failed:", geminiError.message);
+          emissions = null;
+        }
       }
       
-      score = Math.max(0, Math.min(100, score));
+      // If Gemini estimation failed, fall back to keyword-based estimation
+      if (emissions === null) {
+        console.log("📊 Falling back to keyword-based estimation");
+        const isKeywordUnsustainable = productName.toLowerCase().includes("plastic") || 
+                                       productName.toLowerCase().includes("disposable") ||
+                                       productName.toLowerCase().includes("single-use");
+        emissions = isKeywordUnsustainable ? 5 : 1.5;
+      }
+      
+      // Calculate tech-specific sustainability score
+      let score = await calculateTechProductSustainabilityScore(productName, emissions, repairability);
       
       // Eco-bonus for sustainable products (score >= 50)
       const ecoBonus = score >= 50 ? calculateEcoBonus(score) : 0;
@@ -861,7 +852,7 @@ async function evaluateSustainability(productName, repairability = null) {
         isUnsustainable: score < 50,
         score: Math.round(score),
         emissions: emissions,
-        reason: isKeywordUnsustainable ? "Product contains unsustainable materials" : "Product appears to be a sustainable choice",
+        reason: score < 50 ? "Product has higher environmental impact" : "Product has lower environmental impact",
         ecoBonus: Math.round(ecoBonus * 100) / 100
       };
     }
@@ -936,6 +927,187 @@ function calculateEcoBonus(score) {
   if (score >= 60) return 0.50;
   if (score >= 50) return 0.25;
   return 0;
+}
+
+/**
+ * Estimate carbon footprint for tech products using Gemini
+ * Returns CO2e in kg based on product category and specifications
+ * @param {string} productName - Name of the tech product
+ * @returns {Promise<number>} Estimated CO2e in kg
+ */
+async function estimateTechProductCarbonFootprint(productName) {
+  if (!GEMINI_API_KEY) {
+    throw new Error("Gemini API key not available");
+  }
+
+  try {
+    const prompt = `You are an environmental analyst specializing in technology products. Estimate the carbon footprint of this tech product based on typical manufacturing, shipping, and 1 year of use.
+
+Product: ${productName}
+
+Provide ONLY a JSON object with this format:
+{"carbonFootprint": <number in kg CO2e>, "category": "<laptop|phone|tablet|accessory|other>"}
+
+For reference:
+- Smartphone: 40-80 kg CO2e
+- Laptop: 200-400 kg CO2e
+- Tablet: 50-100 kg CO2e
+- Charger/Cable: 2-5 kg CO2e
+- Monitor: 100-150 kg CO2e
+- Headphones: 5-15 kg CO2e
+
+Return ONLY valid JSON, no markdown or explanation.`;
+
+    const requestUrl = `${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`;
+    
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          maxOutputTokens: 50,
+          temperature: 0.3
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!text) {
+      throw new Error("No response from Gemini");
+    }
+
+    // Parse JSON response
+    let cleanedText = text.trim();
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.slice(7);
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.slice(3);
+    }
+    if (cleanedText.endsWith("```")) {
+      cleanedText = cleanedText.slice(0, -3);
+    }
+    cleanedText = cleanedText.trim();
+
+    const result = JSON.parse(cleanedText);
+    const carbonFootprint = Number(result.carbonFootprint);
+    
+    if (!isFinite(carbonFootprint) || carbonFootprint < 0) {
+      throw new Error("Invalid carbon footprint value");
+    }
+    
+    console.log(`🤖 Gemini estimated tech product "${productName}" at ${carbonFootprint}kg CO2e (${result.category})`);
+    return carbonFootprint;
+  } catch (error) {
+    console.error("🤖 Gemini carbon footprint estimation failed:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Calculate sustainability score specifically for tech products
+ * Considers carbon footprint, repairability, and tech-specific factors
+ * @param {string} productName - Name of the product
+ * @param {number} emissions - Carbon footprint in kg CO2e
+ * @param {object} repairability - Repairability score data
+ * @returns {Promise<number>} Sustainability score 0-100
+ */
+async function calculateTechProductSustainabilityScore(productName, emissions, repairability) {
+  // Tech product carbon footprint baselines (kg CO2e)
+  const techBaselines = {
+    laptop: 300,
+    phone: 60,
+    tablet: 75,
+    monitor: 125,
+    charger: 3,
+    cable: 2,
+    headphones: 10,
+    keyboard: 15,
+    mouse: 5,
+    default: 50
+  };
+
+  // Detect product category
+  const productLower = productName.toLowerCase();
+  let baseline = techBaselines.default;
+  let category = "general";
+
+  if (productLower.includes("laptop") || productLower.includes("macbook") || productLower.includes("computer")) {
+    baseline = techBaselines.laptop;
+    category = "laptop";
+  } else if (productLower.includes("phone") || productLower.includes("iphone") || productLower.includes("samsung") || productLower.includes("pixel")) {
+    baseline = techBaselines.phone;
+    category = "phone";
+  } else if (productLower.includes("tablet") || productLower.includes("ipad")) {
+    baseline = techBaselines.tablet;
+    category = "tablet";
+  } else if (productLower.includes("monitor") || productLower.includes("display")) {
+    baseline = techBaselines.monitor;
+    category = "monitor";
+  } else if (productLower.includes("charger") || productLower.includes("power")) {
+    baseline = techBaselines.charger;
+    category = "charger";
+  } else if (productLower.includes("cable") || productLower.includes("cord")) {
+    baseline = techBaselines.cable;
+    category = "cable";
+  } else if (productLower.includes("headphone") || productLower.includes("earphone") || productLower.includes("airpod")) {
+    baseline = techBaselines.headphones;
+    category = "headphones";
+  } else if (productLower.includes("keyboard")) {
+    baseline = techBaselines.keyboard;
+    category = "keyboard";
+  } else if (productLower.includes("mouse") || productLower.includes("trackpad")) {
+    baseline = techBaselines.mouse;
+    category = "mouse";
+  }
+
+  // Calculate base score based on emissions vs baseline
+  // Lower emissions = higher score
+  let score = 100 * (1 - (emissions / (baseline * 1.5)));
+  score = Math.max(0, Math.min(100, score));
+
+  // Bonus for repairability (tech products that are repairable last longer)
+  if (repairability && repairability.score) {
+    const repairBonus = (repairability.score / 10) * 20; // Up to 20 points for high repairability
+    score = Math.min(100, score + repairBonus);
+    console.log(`📊 Tech product score adjusted +${repairBonus.toFixed(1)} for repairability`);
+  }
+
+  // Penalty for products with many negative indicators
+  const negativeIndicators = [
+    "plastic",
+    "disposable", 
+    "single-use",
+    "non-recyclable"
+  ].filter(indicator => productLower.includes(indicator)).length;
+
+  score = Math.max(0, score - (negativeIndicators * 10));
+
+  // Bonus for products with positive sustainability indicators
+  const positiveIndicators = [
+    "recycled",
+    "eco-friendly",
+    "eco",
+    "sustainable",
+    "renewable",
+    "refurbished",
+    "organic"
+  ].filter(indicator => productLower.includes(indicator)).length;
+
+  score = Math.min(100, score + (positiveIndicators * 8));
+
+  console.log(`📊 Tech product score: ${Math.round(score)}/100 (${category}, ${emissions}kg CO2e vs ${baseline}kg baseline)`);
+  return Math.round(score);
 }
 
 /**
