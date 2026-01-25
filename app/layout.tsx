@@ -8,6 +8,9 @@ import { Providers } from "./providers";
 export const metadata = {
   title: "GatorGreen",
   description: "Environmental opportunities and sustainability platform",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

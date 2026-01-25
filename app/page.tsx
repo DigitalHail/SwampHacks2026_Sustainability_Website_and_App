@@ -26,10 +26,10 @@ export default function HomePage() {
   }, []);
 
   return (
-    <main className="flex flex-col min-h-screen bg-white relative z-[100]">
+    <main className="flex flex-col min-h-screen bg-white relative" style={{ isolation: 'isolate', backgroundColor: '#ffffff' }}>
       {/* Hero */}
       <div className="w-full max-w-7xl h-screen mx-auto flex items-center justify-center relative z-[100]">
-        <div className="mx-4 md:mx-8 rounded-3xl bg-emerald-50/95 shadow-xl p-10 md:p-20 lg:p-32 text-center w-full relative z-[100]">
+        <div className="mx-4 md:mx-8 rounded-3xl shadow-xl p-10 md:p-20 lg:p-32 text-center w-full relative z-[100]" style={{ backgroundColor: 'rgba(236, 253, 245, 0.95)' }}>
           <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold mb-6 text-emerald-900">GatorGreen</h1>
           <p className="text-2xl md:text-3xl lg:text-4xl font-extrabold mb-8 leading-tight text-emerald-600">
             Environmental opportunities and sustainability platform
@@ -50,17 +50,18 @@ export default function HomePage() {
       </div>
 
       {/* Animated info band + fading box */}
-      <div ref={sectionRef} className="relative z-[150] overflow-hidden">
+      <div ref={sectionRef} className="relative px-4 md:px-8" style={{ zIndex: 2000, isolation: 'isolate' }}>
         <div
-          className={`w-full h-[25vh] flex items-center justify-center rounded-t-2xl transition-opacity duration-1000 ease-in-out relative z-[150] bg-emerald-600 ${
+          className={`w-full h-[25vh] flex items-center justify-center rounded-t-2xl transition-opacity duration-1000 ease-in-out relative overflow-hidden ${
             visible ? "opacity-100" : "opacity-0"
           }`}
+          style={{ backgroundColor: '#10b981', zIndex: 2000, position: 'relative' }}
         >
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white relative z-[150]">What is GatorGreen?</h2>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white relative" style={{ zIndex: 2000 }}>What is GatorGreen?</h2>
         </div>
 
-        <section className="w-full flex items-center justify-center py-12 relative z-[150] bg-white">
-          <div className="w-full px-0 relative z-[150] bg-white">
+        <section className="w-full flex items-center justify-center py-12 relative overflow-hidden rounded-b-2xl" style={{ backgroundColor: '#ffffff', zIndex: 2000, position: 'relative' }}>
+          <div className="w-full px-0 relative" style={{ backgroundColor: '#ffffff', zIndex: 2000 }}>
             <FadingBox visible={visible} />
             <Footprints targetRef={sectionRef} />
           </div>
@@ -73,10 +74,10 @@ export default function HomePage() {
 function FadingBox({ visible }: { visible: boolean }) {
   return (
     <div
-      className={`mx-auto bg-white rounded-2xl p-8 shadow-xl w-full transition-opacity duration-1000 ease-in-out relative z-[200] ${
+      className={`mx-auto bg-white rounded-2xl p-8 shadow-xl w-full transition-opacity duration-1000 ease-in-out relative ${
         visible ? "opacity-100 delay-300" : "opacity-0"
       }`}
-      style={{ maxWidth: "100%" }}
+      style={{ maxWidth: "100%", zIndex: 2100 }}
     >
       <p className="text-lg md:text-xl text-emerald-900 leading-relaxed">
         GatorGreen helps you find and track eco-friendly opportunities, learn practical tips, and see your impact over time.
@@ -111,7 +112,7 @@ function Footprints({ targetRef }: { targetRef: React.RefObject<HTMLElement | nu
   }, [targetRef]);
 
   return (
-    <div className="fixed right-8 top-28 flex flex-col gap-4 pointer-events-none" style={{ zIndex: -9999 }}>
+    <div className="fixed right-8 top-[5vh] flex flex-col gap-4 pointer-events-none" style={{ zIndex: -9999 }}>
       {Array.from({ length: max }).map((_, i) => {
         const isVisible = i < count;
         const isLeft = i % 2 === 0;
