@@ -306,120 +306,141 @@ function displayGreenAlternatives(alternativesData) {
   section.style.display = 'block';
 }
 
-// Save settings
-document.getElementById('saveSettings').addEventListener('click', () => {
-  const apiKey = document.getElementById('apiKey').value;
-  const mainAccount = document.getElementById('mainAccount').value;
-  const savingsAccount = document.getElementById('savingsAccount').value;
-  const climatiqKey = document.getElementById('climatiqKey').value;
-  const geminiKey = document.getElementById('geminiKey').value;
-  const carbonBudgetValue = document.getElementById('carbonBudget').value;
-  const enableIfixit = document.getElementById('enableIfixit').checked;
-  const carbonBudgetKg = carbonBudgetValue ? Number(carbonBudgetValue) : null;
-  
-  if (!apiKey || !mainAccount || !savingsAccount) {
-    showStatus('Please fill in Nessie settings', 'error');
-    return;
-  }
-  
-  chrome.storage.local.set({
-    apiKey: apiKey,
-    mainAccount: mainAccount,
-    savingsAccount: savingsAccount,
-    climatiqKey: climatiqKey,
-    geminiKey: geminiKey,
-    carbonBudgetKg: carbonBudgetKg,
-    enableIfixit: enableIfixit
-  }, () => {
-    enableIfixitSetting = enableIfixit;
-    showStatus('✓ Settings saved successfully!', 'success');
-    triggerPageScan();
-  });
-});
-
-
-// Test API button
-document.getElementById('testAPI').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ type: 'CHECK_BALANCE' }, (response) => {
-    if (response?.success) {
-      let message = `✓ API Connected! Found ${response.data?.length || 0} accounts`;
+// ============================================
+// 🔘 BUTTON EVENT LISTENERS
+// All listeners wrapped in DOMContentLoaded to ensure elements exist
+// ============================================
+function initButtonListeners() {
+  // Save settings button
+  const saveSettingsBtn = document.getElementById('saveSettings');
+  if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', () => {
+      const apiKey = document.getElementById('apiKey').value;
+      const mainAccount = document.getElementById('mainAccount').value;
+      const savingsAccount = document.getElementById('savingsAccount').value;
+      const climatiqKey = document.getElementById('climatiqKey').value;
+      const geminiKey = document.getElementById('geminiKey').value;
+      const carbonBudgetValue = document.getElementById('carbonBudget').value;
+      const enableIfixit = document.getElementById('enableIfixit').checked;
+      const carbonBudgetKg = carbonBudgetValue ? Number(carbonBudgetValue) : null;
       
-      // If accounts found, display them
-      if (response.accounts && response.accounts.length > 0) {
-        message += '\n\nAvailable Accounts:\n';
-        response.accounts.forEach((acc, idx) => {
-          message += `${idx + 1}. ${acc.nickname} (${acc.type})\n   ID: ${acc.id}\n`;
-        });
-        
-        // Auto-populate if there are at least 2 accounts
-        if (response.accounts.length >= 2) {
-          document.getElementById('mainAccount').value = response.accounts[0].id;
-          document.getElementById('savingsAccount').value = response.accounts[1].id;
-          message += '\n✓ Auto-filled account IDs (first 2 accounts)';
-        }
+      if (!apiKey || !mainAccount || !savingsAccount) {
+        showStatus('Please fill in Nessie settings', 'error');
+        return;
       }
       
-      showStatus(message, 'success');
-    } else {
-      showStatus('❌ Error: ' + (response?.error || 'Unknown error'), 'error');
-    }
-  });
-});
-
-// Check balance button
-document.getElementById('checkBalance').addEventListener('click', async () => {
-  try {
-    const balanceSection = document.getElementById('balanceSection');
-    
-    // Toggle: if already showing, hide it
-    if (balanceSection.style.display === 'block') {
-      balanceSection.style.display = 'none';
-      return;
-    }
-    
-    // Get stored account IDs
-    const data = await chrome.storage.local.get(['apiKey', 'mainAccount', 'savingsAccount']);
-    const apiKey = data.apiKey;
-    const mainAccountId = data.mainAccount;
-    const savingsAccountId = data.savingsAccount;
-    
-    if (!apiKey || !mainAccountId || !savingsAccountId) {
-      showStatus('❌ Please configure accounts in settings first', 'error');
-      return;
-    }
-    
-    // Fetch account details from background script
-    const response = await chrome.runtime.sendMessage({
-      type: 'GET_ACCOUNT_DETAILS',
-      apiKey: apiKey,
-      mainAccountId: mainAccountId,
-      savingsAccountId: savingsAccountId
+      chrome.storage.local.set({
+        apiKey: apiKey,
+        mainAccount: mainAccount,
+        savingsAccount: savingsAccount,
+        climatiqKey: climatiqKey,
+        geminiKey: geminiKey,
+        carbonBudgetKg: carbonBudgetKg,
+        enableIfixit: enableIfixit
+      }, () => {
+        enableIfixitSetting = enableIfixit;
+        showStatus('✓ Settings saved successfully!', 'success');
+        triggerPageScan();
+      });
     });
-    
-    if (response?.success) {
-      // Display balances
-      document.getElementById('mainBalance').textContent = (response.mainBalance || 0).toFixed(2);
-      document.getElementById('savingsBalance').textContent = (response.savingsBalance || 0).toFixed(2);
-      document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
-      balanceSection.style.display = 'block';
-      showStatus('✓ Balances updated!', 'success');
-    } else {
-      showStatus('❌ Error: ' + (response?.error || 'Unknown error'), 'error');
-    }
-  } catch (error) {
-    showStatus('❌ Error: ' + error.message, 'error');
   }
-});
 
-document.getElementById('clearIfixitCache').addEventListener('click', async () => {
-  try {
-    await chrome.storage.local.remove(['ifixitCache', 'lastProductAnalysis']);
-    showStatus('✓ Repairability cache cleared', 'success');
-    triggerPageScan();
-  } catch (error) {
-    showStatus('❌ Error: ' + error.message, 'error');
+  // Test API button
+  const testAPIBtn = document.getElementById('testAPI');
+  if (testAPIBtn) {
+    testAPIBtn.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'CHECK_BALANCE' }, (response) => {
+        if (response?.success) {
+          let message = `✓ API Connected! Found ${response.data?.length || 0} accounts`;
+          
+          // If accounts found, display them
+          if (response.accounts && response.accounts.length > 0) {
+            message += '\n\nAvailable Accounts:\n';
+            response.accounts.forEach((acc, idx) => {
+              message += `${idx + 1}. ${acc.nickname} (${acc.type})\n   ID: ${acc.id}\n`;
+            });
+            
+            // Auto-populate if there are at least 2 accounts
+            if (response.accounts.length >= 2) {
+              document.getElementById('mainAccount').value = response.accounts[0].id;
+              document.getElementById('savingsAccount').value = response.accounts[1].id;
+              message += '\n✓ Auto-filled account IDs (first 2 accounts)';
+            }
+          }
+          
+          showStatus(message, 'success');
+        } else {
+          showStatus('❌ Error: ' + (response?.error || 'Unknown error'), 'error');
+        }
+      });
+    });
   }
-});
+
+  // Check balance button
+  const checkBalanceBtn = document.getElementById('checkBalance');
+  if (checkBalanceBtn) {
+    checkBalanceBtn.addEventListener('click', async () => {
+      try {
+        const balanceSection = document.getElementById('balanceSection');
+        
+        // Toggle: if already showing, hide it
+        if (balanceSection.style.display === 'block') {
+          balanceSection.style.display = 'none';
+          return;
+        }
+        
+        // Get stored account IDs
+        const data = await chrome.storage.local.get(['apiKey', 'mainAccount', 'savingsAccount']);
+        const apiKey = data.apiKey;
+        const mainAccountId = data.mainAccount;
+        const savingsAccountId = data.savingsAccount;
+        
+        if (!apiKey || !mainAccountId || !savingsAccountId) {
+          showStatus('❌ Please configure accounts in settings first', 'error');
+          return;
+        }
+        
+        // Fetch account details from background script
+        const response = await chrome.runtime.sendMessage({
+          type: 'GET_ACCOUNT_DETAILS',
+          apiKey: apiKey,
+          mainAccountId: mainAccountId,
+          savingsAccountId: savingsAccountId
+        });
+        
+        if (response?.success) {
+          // Display balances
+          document.getElementById('mainBalance').textContent = (response.mainBalance || 0).toFixed(2);
+          document.getElementById('savingsBalance').textContent = (response.savingsBalance || 0).toFixed(2);
+          document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+          balanceSection.style.display = 'block';
+          showStatus('✓ Balances updated!', 'success');
+        } else {
+          showStatus('❌ Error: ' + (response?.error || 'Unknown error'), 'error');
+        }
+      } catch (error) {
+        showStatus('❌ Error: ' + error.message, 'error');
+      }
+    });
+  }
+
+  // Clear iFixit cache button
+  const clearCacheBtn = document.getElementById('clearIfixitCache');
+  if (clearCacheBtn) {
+    clearCacheBtn.addEventListener('click', async () => {
+      try {
+        await chrome.storage.local.remove(['ifixitCache', 'lastProductAnalysis']);
+        showStatus('✓ Repairability cache cleared', 'success');
+        triggerPageScan();
+      } catch (error) {
+        showStatus('❌ Error: ' + error.message, 'error');
+      }
+    });
+  }
+}
+
+// Initialize button listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', initButtonListeners);
 
 function showStatus(message, type) {
   const statusDiv = document.getElementById('settingsStatus');
