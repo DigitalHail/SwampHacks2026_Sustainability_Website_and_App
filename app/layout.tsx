@@ -1,5 +1,6 @@
 import "leaflet/dist/leaflet.css";
 import type { ReactNode } from "react";
+import Header from "../components/Header";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -12,7 +13,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <Header />
+          {children}
+        </Providers>
       </body>
     </html>
   );
