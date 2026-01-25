@@ -64,11 +64,13 @@ export function MapComponent() {
   const [loadingPOIs, setLoadingPOIs] = useState(false);
   const [includeRepair, setIncludeRepair] = useState(true);
   const [includeVolunteer, setIncludeVolunteer] = useState(true);
+  const [includeRecycling, setIncludeRecycling] = useState(true);
+  const [includeParks, setIncludeParks] = useState(true);
   const [isLeafletReady, setIsLeafletReady] = useState(false);
   const mapRef = useRef(null);
   const [leafletMap, setLeafletMap] = useState<L.Map | null>(null);
-  const [icons, setIcons] = useState<{ default?: L.Icon; repair?: L.Icon; volunteer?: L.Icon }>({});
-  const [listFilter, setListFilter] = useState<'all' | 'repair' | 'volunteer'>('all');
+  const [icons, setIcons] = useState<{ default?: L.Icon; repair?: L.Icon; volunteer?: L.Icon; recycling?: L.Icon; parks?: L.Icon }>({});
+  const [listFilter, setListFilter] = useState<'all' | 'repair' | 'volunteer' | 'recycling' | 'parks'>('all');
   const { location, error: locationError, loading: locationLoading } = useLocation();
 
   // Client-only Leaflet icon fix to avoid SSR 'window is not defined'.
@@ -89,7 +91,7 @@ export function MapComponent() {
 
       // Create colored icons for categories
       const shadowUrl = "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png";
-      const makeIcon = (color: "green" | "orange") =>
+      const makeIcon = (color: "green" | "orange" | "blue" | "red") =>
         leaflet.icon({
           iconRetinaUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
           iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
@@ -104,6 +106,8 @@ export function MapComponent() {
         default: leaflet.Icon.Default.prototype as unknown as L.Icon,
         repair: makeIcon("orange"),
         volunteer: makeIcon("green"),
+        recycling: makeIcon("blue"),
+        parks: makeIcon("red"),
       });
       setIsLeafletReady(true);
     })();
@@ -168,10 +172,10 @@ export function MapComponent() {
     return pois.filter(p => p.category === listFilter);
   }, [pois, listFilter]);
 
-  const fetchNearbyPOIs = async (lat: number, lng: number, radius = 5000) => {
+  const fetchNearbyPOIs = async (lat: number, lng: number, radius = 25000) => {
     setLoadingPOIs(true);
     try {
-      // Build Overpass QL query: only repair shops and volunteer places, within a 4km radius
+      // Build Overpass QL query: repair shops, volunteer places, and recycling centers, within a 5km radius
       const repairTags = [
         'shop="car_repair"',
         'shop="bicycle"',
@@ -188,6 +192,16 @@ export function MapComponent() {
         'amenity="community_centre"',
         'amenity="social_facility"'
       ];
+      const recyclingTags = [
+        'amenity="recycling"',
+        'recycling_type="centre"',
+        'shop="scrap_metal"'
+      ];
+      const parksTags = [
+        'leisure="park"',
+        'leisure="garden"',
+        'leisure="nature_reserve"'
+      ];
 
       const makeParts = (tags: string[], kind: 'node'|'way'|'relation') =>
         tags.map(t => `${kind}[${t}](around:${radius},${lat},${lng});`).join('\n');
@@ -201,6 +215,12 @@ export function MapComponent() {
           ${includeVolunteer ? makeParts(volunteerTags, 'node') : ''}
           ${includeVolunteer ? makeParts(volunteerTags, 'way') : ''}
           ${includeVolunteer ? makeParts(volunteerTags, 'relation') : ''}
+          ${includeRecycling ? makeParts(recyclingTags, 'node') : ''}
+          ${includeRecycling ? makeParts(recyclingTags, 'way') : ''}
+          ${includeRecycling ? makeParts(recyclingTags, 'relation') : ''}
+          ${includeParks ? makeParts(parksTags, 'node') : ''}
+          ${includeParks ? makeParts(parksTags, 'way') : ''}
+          ${includeParks ? makeParts(parksTags, 'relation') : ''}
         );
         out center;
       `;
@@ -241,7 +261,17 @@ export function MapComponent() {
             el.tags.amenity === 'community_centre' ||
             el.tags.amenity === 'social_facility'
           );
-          const category = isRepair ? 'repair' : isVolunteer ? 'volunteer' : 'other';
+          const isRecycling = (
+            el.tags.amenity === 'recycling' ||
+            el.tags.recycling_type === 'centre' ||
+            el.tags.shop === 'scrap_metal'
+          );
+          const isParks = (
+            el.tags.leisure === 'park' ||
+            el.tags.leisure === 'garden' ||
+            el.tags.leisure === 'nature_reserve'
+          );
+          const category = isRepair ? 'repair' : isVolunteer ? 'volunteer' : isRecycling ? 'recycling' : isParks ? 'parks' : 'other';
           return ({
             id: `${el.type}-${el.id}`,
             name: el.tags.name,
@@ -314,7 +344,7 @@ export function MapComponent() {
             disabled={loadingPOIs}
             className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition font-semibold disabled:opacity-50"
           >
-            {loadingPOIs ? "Loading..." : "Load Repair & Volunteer Places (5km)"}
+            {loadingPOIs ? "Loading..." : "Load Nearby Places of Sustainability"}
           </button>
           <label className="flex items-center gap-1 text-sm text-gray-700">
             <input type="checkbox" checked={includeRepair} onChange={(e) => setIncludeRepair(e.target.checked)} />
@@ -323,6 +353,14 @@ export function MapComponent() {
           <label className="flex items-center gap-1 text-sm text-gray-700">
             <input type="checkbox" checked={includeVolunteer} onChange={(e) => setIncludeVolunteer(e.target.checked)} />
             Volunteer
+          </label>
+          <label className="flex items-center gap-1 text-sm text-gray-700">
+            <input type="checkbox" checked={includeRecycling} onChange={(e) => setIncludeRecycling(e.target.checked)} />
+            Recycling
+          </label>
+          <label className="flex items-center gap-1 text-sm text-gray-700">
+            <input type="checkbox" checked={includeParks} onChange={(e) => setIncludeParks(e.target.checked)} />
+            Parks
           </label>
           <span className="text-xs text-gray-600">
             {pois.length > 0 && `${pois.length} places found`}
@@ -370,8 +408,15 @@ export function MapComponent() {
               </Marker>
             ))}
 
-            {pois.map((poi) => (
-              <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={poi.category === 'repair' ? icons.repair : icons.volunteer}>
+            {pois.map((poi) => {
+              const iconMap: { [key: string]: L.Icon | undefined } = {
+                repair: icons.repair,
+                volunteer: icons.volunteer,
+                recycling: icons.recycling,
+                parks: icons.parks,
+              };
+              return (
+              <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={iconMap[poi.category] || icons.default}>
                 <Popup>
                   <div className="text-sm">
                     <p className="font-semibold">{poi.name}</p>
@@ -400,7 +445,8 @@ export function MapComponent() {
                   </div>
                 </Popup>
               </Marker>
-            ))}
+            );
+            })}
 
             <MapUpdater location={selectedLocation} onMapClick={handleMapClick} />
             <MapRefSetter onReady={(m) => setLeafletMap(m)} />
@@ -413,7 +459,7 @@ export function MapComponent() {
               <h3 className="text-sm font-semibold text-emerald-800">Nearby Repair & Volunteer</h3>
               <span className="text-xs text-gray-600">{filteredPois.length} shown</span>
             </div>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <button
                 className={`text-xs px-2 py-1 rounded border ${listFilter === 'all' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}`}
                 onClick={() => setListFilter('all')}
@@ -432,6 +478,18 @@ export function MapComponent() {
               >
                 Volunteer
               </button>
+              <button
+                className={`text-xs px-2 py-1 rounded border ${listFilter === 'recycling' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50'}`}
+                onClick={() => setListFilter('recycling')}
+              >
+                Recycling
+              </button>
+              <button
+                className={`text-xs px-2 py-1 rounded border ${listFilter === 'parks' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-700 border-red-300 hover:bg-red-50'}`}
+                onClick={() => setListFilter('parks')}
+              >
+                Parks
+              </button>
             </div>
             <ul className="space-y-2">
               {filteredPois.map((poi) => (
@@ -441,7 +499,12 @@ export function MapComponent() {
                     <div className="text-xs text-gray-600 capitalize">{poi.category} • {poi.type}</div>
                   </div>
                   <button
-                    className={`text-xs px-2 py-1 rounded text-white ${poi.category === 'repair' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}
+                    className={`text-xs px-2 py-1 rounded text-white ${
+                      poi.category === 'repair' ? 'bg-orange-600 hover:bg-orange-700' :
+                      poi.category === 'volunteer' ? 'bg-green-600 hover:bg-green-700' :
+                      poi.category === 'recycling' ? 'bg-blue-600 hover:bg-blue-700' :
+                      'bg-red-600 hover:bg-red-700'
+                    }`}
                     onClick={() => leafletMap?.setView([poi.lat, poi.lng], 16)}
                   >
                     Zoom

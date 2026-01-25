@@ -43,17 +43,6 @@ export default function ExtensionInstallPage() {
           <li>Optionally pin the extension: click the puzzle icon, then the pin next to WattWise.</li>
         </ol>
 
-        <div className="mt-8 p-4 bg-emerald-50 rounded border border-emerald-200">
-          <h2 className="text-xl font-semibold text-emerald-800 mb-2">Credentials (for demo)</h2>
-          <p className="text-sm text-gray-700 mb-2">Open the extension popup, click ⚙️ Settings, then enter:</p>
-          <pre className="bg-white border rounded p-3 text-sm overflow-auto">
-{`Nessie API Key:     99864d500fa931ec644d3a5d865a866c
-Main Account ID:    69753af095150878eafea16f
-Savings Account ID: 69753af095150878eafea170`}
-          </pre>
-          <p className="text-sm text-gray-700 mt-2">Click Save Settings, then Test Connection.</p>
-        </div>
-
         <div className="mt-8 p-4 bg-gray-50 rounded border">
           <h2 className="text-xl font-semibold mb-2">Tips</h2>
           <ul className="list-disc list-inside space-y-2 text-gray-800">
