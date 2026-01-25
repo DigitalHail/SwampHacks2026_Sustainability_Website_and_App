@@ -2,8 +2,8 @@ console.log("🔴 [WattWise Background] Service worker loading...");
 
 // Store API keys in Chrome storage instead of hardcoding
 let NESSIE_API_KEY = "99864d500fa931ec644d3a5d865a866c";
-// Nessie API uses HTTP, not HTTPS
-const NESSIE_BASE_URL = "http://api.nessieisreal.com";
+// Nessie API - use HTTPS for extension security
+const NESSIE_BASE_URL = "https://api.nessieisreal.com";
 
 // Climatiq API for sustainability scoring
 const CLIMATIQ_BASE_URL = "https://api.climatiq.io/estimate";
@@ -1640,8 +1640,12 @@ async function testNessieAPI(key) {
     const response = await fetch(accountsUrl, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
       }
+    }).catch(fetchError => {
+      console.error("🔴 Network fetch error:", fetchError.message);
+      throw new Error(`Network error: ${fetchError.message}. Please check your connection and ensure Nessie API is accessible.`);
     });
     
     console.log("🧪 Response status:", response.status);
@@ -1690,7 +1694,10 @@ async function getAccountBalance(key, accountId) {
     const url = NESSIE_BASE_URL + "/accounts/" + accountId + "?key=" + key;
     console.log("Fetching account balance for:", accountId);
     
-    const response = await fetch(url);
+    const response = await fetch(url).catch(err => {
+      console.error("🔴 Network error fetching account balance:", err.message);
+      throw new Error(`Network error: ${err.message}`);
+    });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
@@ -1715,14 +1722,23 @@ async function getPurchaseHistory(key, accountId) {
   const url = `${NESSIE_BASE_URL}/accounts/${accountId}/purchases?key=${key}`;
   console.log("Fetching purchase history for:", accountId);
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`API returned ${response.status}: ${errorData.message || response.statusText}`);
-  }
+  try {
+    const response = await fetch(url).catch(err => {
+      console.error("🔴 Network error fetching purchase history:", err.message);
+      throw new Error(`Network error: ${err.message}`);
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(`API returned ${response.status}: ${errorData.message || response.statusText}`);
+    }
 
-  const purchases = await response.json();
-  return Array.isArray(purchases) ? purchases : [];
+    const purchases = await response.json();
+    return Array.isArray(purchases) ? purchases : [];
+  } catch (error) {
+    console.error("🔴 Error fetching purchase history:", error.message);
+    throw error;
+  }
 }
 
 /**
@@ -1747,20 +1763,28 @@ async function depositEcoBonus(key, accountId, amount, productName = "Sustainabl
   
   console.log("💚 Depositing eco-bonus reward:", payload);
   
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => {
+      console.error("🔴 Network error depositing eco-bonus:", err.message);
+      throw new Error(`Network error: ${err.message}`);
+    });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`Eco-bonus deposit failed: ${error.message}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(`Eco-bonus deposit failed: ${error.message}`);
+    }
+
+    const result = await response.json();
+    console.log(`✅ Successfully deposited $${amount.toFixed(2)} eco-bonus to Rewards account!`);
+    return result;
+  } catch (error) {
+    console.error("🔴 Eco-bonus deposit error:", error.message);
+    throw error;
   }
-
-  const result = await response.json();
-  console.log(`✅ Successfully deposited $${amount.toFixed(2)} eco-bonus to Rewards account!`);
-  return result;
 }
 
 /**
@@ -1782,6 +1806,28 @@ async function performNessieTransfer(key, fromId, toId, amount) {
     description: "WattWise Account Transfer"
   };
   
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => {
+      console.error("🔴 Network error performing transfer:", err.message);
+      throw new Error(`Network error: ${err.message}`);
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(`Transfer failed: ${error.message}`);
+    }
+
+    const result = await response.json();
+    console.log(`✅ Successfully transferred $${amount.toFixed(2)}!`);
+    return result;
+  } catch (error) {
+    console.error("🔴 Transfer error:", error.message);
+    throw error;
+  }
   console.log("Initiating transfer:", payload);
   
   const response = await fetch(url, {
