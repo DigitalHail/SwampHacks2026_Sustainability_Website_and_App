@@ -1,3 +1,5 @@
+console.log("🔴 [WattWise Background] Service worker loading...");
+
 // Store API keys in Chrome storage instead of hardcoding
 let NESSIE_API_KEY = "99864d500fa931ec644d3a5d865a866c";
 // Nessie API uses HTTP, not HTTPS
@@ -8,69 +10,102 @@ const CLIMATIQ_BASE_URL = "https://api.climatiq.io/estimate";
 // You can get a free API key at https://climatiq.io/
 let CLIMATIQ_API_KEY = "40D52DBM4D1BVC4E7M1GTAEKDR";
 
-console.log("🟢 WattWise background service worker loaded!");
-console.log("API Key initialized:", NESSIE_API_KEY.substring(0, 10) + "...");
+// iFixit API for repairability scores (optional)
+const IFIXIT_BASE_URL = "https://www.ifixit.com/api/2.0";
+
+console.log("🟢 [WattWise Background] Service worker loaded!");
+console.log("🔑 [WattWise Background] API Key initialized:", NESSIE_API_KEY.substring(0, 10) + "...");
 
 // Load API keys from Chrome storage on startup
 chrome.storage.sync.get(['nessieApiKey', 'climatiqApiKey'], (result) => {
   if (result.nessieApiKey) {
     NESSIE_API_KEY = result.nessieApiKey;
+    console.log("🔑 [WattWise Background] Nessie key loaded from sync");
   }
   if (result.climatiqApiKey) {
     CLIMATIQ_API_KEY = result.climatiqApiKey;
+    console.log("🔑 [WattWise Background] Climatiq key loaded from sync");
   }
-  console.log("✅ API keys loaded from sync storage");
 });
 
 // Also check local storage for recently saved keys
 chrome.storage.local.get(['climatiqKey'], (result) => {
   if (result.climatiqKey) {
     CLIMATIQ_API_KEY = result.climatiqKey;
-    console.log("✅ Climatiq key loaded from local storage");
+    console.log("🔑 [WattWise Background] Climatiq key loaded from local");
   }
 });
 
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
-  console.log("Message received:", message.type);
-  console.log("Full message:", message);
+  console.log("📬 [WattWise Background] Message received:", message.type, "from", sender);
+  console.log("📋 [WattWise Background] Full message:", message);
   
   if (message.type === "ANALYZE_PRODUCT") {
-    console.log("Analyzing product:", message.name);
-    const data = await chrome.storage.local.get(["apiKey", "mainAccount", "savingsAccount"]);
-    
-    if (!data.apiKey || !data.mainAccount) {
-      console.log("Missing API key or account info");
-      sendResponse({ success: false, error: "Missing API configuration" });
-      return;
+    console.log("🔍 [WattWise Background] Analyzing product:", message.name);
+    const data = await chrome.storage.local.get([
+      "apiKey",
+      "mainAccount",
+      "savingsAccount",
+      "climatiqKey",
+      "enableIfixit",
+      "carbonBudgetKg",
+      "carbonMonthKey",
+      "carbonEmissionsKg",
+      "ifixitCache"
+    ]);
+    console.log("📊 [WattWise Background] Storage data:", data);
+
+    if (data.apiKey) {
+      NESSIE_API_KEY = data.apiKey;
+    }
+    if (data.climatiqKey) {
+      CLIMATIQ_API_KEY = data.climatiqKey;
     }
 
     try {
       // Evaluate sustainability using Climatiq (with fallback to keywords)
+      console.log("🌱 [WattWise Background] Evaluating sustainability...");
       const evaluation = await evaluateSustainability(message.name);
-      console.log("🌍 Sustainability evaluation:", evaluation);
+      console.log("✅ [WattWise Background] Sustainability evaluation:", evaluation);
       
-      if (evaluation.isUnsustainable && evaluation.taxAmount > 0) {
-        console.log(`🟠 Unsustainable product detected (score: ${evaluation.score}). Triggering Sustainability Tax ($${evaluation.taxAmount})...`);
-        try {
-          const result = await performNessieTransfer(data.apiKey, data.mainAccount, data.savingsAccount, evaluation.taxAmount);
-          sendResponse({ 
-            success: true, 
-            message: `Sustainability tax applied: $${evaluation.taxAmount}`,
-            evaluation: evaluation,
-            result 
-          });
-        } catch (error) {
-          console.error("Transfer failed:", error);
-          sendResponse({ success: false, error: error.message });
-        }
-      } else {
-        console.log(`✅ Sustainable product (score: ${evaluation.score}). No tax applied.`);
-        sendResponse({ 
-          success: true, 
-          message: `Product is sustainable! (Score: ${evaluation.score}/100)`,
-          evaluation: evaluation
-        });
-      }
+      const repairability = await getRepairabilityScore(
+        message.name,
+        data.enableIfixit,
+        data.ifixitCache || {}
+      );
+
+      const budgetStatus = await updateMonthlyBudget(
+        evaluation.emissions || 0,
+        data.carbonBudgetKg,
+        data.carbonMonthKey,
+        data.carbonEmissionsKg
+      );
+
+      const analysis = {
+        name: message.name,
+        isUnsustainable: evaluation.isUnsustainable,
+        score: evaluation.score,
+        emissions: evaluation.emissions || 0,
+        reason: evaluation.reason,
+        taxAmount: evaluation.taxAmount || 0,
+        repairability: repairability.data,
+        budgetStatus: budgetStatus,
+        analyzedAt: new Date().toISOString()
+      };
+
+      await chrome.storage.local.set({
+        lastProductAnalysis: analysis,
+        lastBudgetStatus: budgetStatus,
+        ifixitCache: repairability.cache
+      });
+
+      console.log("✅ Stored product analysis and budget status");
+
+      sendResponse({
+        success: true,
+        message: `Product analyzed (Score: ${analysis.score}/100)`,
+        evaluation: analysis
+      });
     } catch (error) {
       console.error("Product analysis error:", error);
       sendResponse({ success: false, error: error.message });
@@ -81,7 +116,9 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.type === "CHECK_BALANCE") {
     console.log("CHECK_BALANCE requested");
     try {
-      const data = await testNessieAPI();
+      const stored = await chrome.storage.local.get(["apiKey"]);
+      const key = stored.apiKey || NESSIE_API_KEY;
+      const data = await testNessieAPI(key);
       console.log("testNessieAPI success:", data);
       sendResponse({ success: true, ...data });
     } catch (error) {
@@ -108,6 +145,22 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     }
     return true;
   }
+
+  if (message.type === "GET_PURCHASE_HISTORY") {
+    console.log("GET_PURCHASE_HISTORY requested");
+    try {
+      const purchases = await getPurchaseHistory(message.apiKey, message.accountId);
+      await chrome.storage.local.set({
+        lastPurchaseHistory: purchases,
+        lastPurchaseHistoryAt: new Date().toISOString()
+      });
+      sendResponse({ success: true, purchases: purchases });
+    } catch (error) {
+      console.error("GET_PURCHASE_HISTORY error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
 });
 
 /**
@@ -122,9 +175,11 @@ async function evaluateSustainability(productName) {
       console.log("⚠️ No Climatiq API key - using fallback keyword matching");
       const isUnsustainable = productName.toLowerCase().includes("plastic") || 
                               productName.toLowerCase().includes("disposable");
+      const emissions = isUnsustainable ? 8 : 2;
       return {
         isUnsustainable: isUnsustainable,
         score: isUnsustainable ? 25 : 75,
+        emissions: emissions,
         reason: isUnsustainable ? "Contains plastic or disposable materials" : "Sustainable product",
         taxAmount: isUnsustainable ? 1.50 : 0
       };
@@ -182,23 +237,121 @@ async function evaluateSustainability(productName) {
     // Fallback to keyword matching on error
     const isUnsustainable = productName.toLowerCase().includes("plastic") || 
                             productName.toLowerCase().includes("disposable");
+    const emissions = isUnsustainable ? 8 : 2;
     return {
       isUnsustainable: isUnsustainable,
       score: isUnsustainable ? 25 : 75,
+      emissions: emissions,
       reason: "Using fallback sustainability assessment",
       taxAmount: isUnsustainable ? 1.50 : 0
     };
   }
 }
 
-// Test the API connection
-async function testNessieAPI() {
+function getMonthKey(date) {
+  const value = date || new Date();
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function roundToTwo(value) {
+  return Math.round(value * 100) / 100;
+}
+
+async function updateMonthlyBudget(emissionsKg, budgetKg, storedMonthKey, storedEmissionsKg) {
+  const monthKey = getMonthKey();
+  const normalizedBudget = Number.isFinite(budgetKg) && budgetKg > 0 ? budgetKg : 50;
+  let currentEmissions = 0;
+
+  if (storedMonthKey === monthKey) {
+    currentEmissions = Number(storedEmissionsKg) || 0;
+  }
+
+  currentEmissions += Number(emissionsKg) || 0;
+  const remaining = normalizedBudget - currentEmissions;
+  const percentUsed = normalizedBudget > 0 ? (currentEmissions / normalizedBudget) * 100 : 0;
+
+  const status = {
+    monthKey: monthKey,
+    budgetKg: roundToTwo(normalizedBudget),
+    emissionsKg: roundToTwo(currentEmissions),
+    remainingKg: roundToTwo(Math.max(0, remaining)),
+    percentUsed: roundToTwo(Math.max(0, percentUsed))
+  };
+
+  await chrome.storage.local.set({
+    carbonMonthKey: monthKey,
+    carbonEmissionsKg: currentEmissions,
+    carbonBudgetKg: normalizedBudget
+  });
+
+  return status;
+}
+
+function normalizeCacheKey(productName) {
+  return productName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+async function getRepairabilityScore(productName, enableIfixit, cache) {
+  if (!enableIfixit) {
+    return { data: null, cache: cache };
+  }
+
+  const cacheKey = normalizeCacheKey(productName);
+  const cached = cache[cacheKey];
+  if (cached && cached.cachedAt) {
+    const cachedAt = new Date(cached.cachedAt);
+    const ageDays = (Date.now() - cachedAt.getTime()) / (1000 * 60 * 60 * 24);
+    if (ageDays <= 30) {
+      return { data: cached, cache: cache };
+    }
+  }
+
   try {
-    console.log("Testing API with key:", NESSIE_API_KEY.substring(0, 10) + "...");
+    const searchUrl = `${IFIXIT_BASE_URL}/search/${encodeURIComponent(productName)}`;
+    const response = await fetch(searchUrl);
+    if (!response.ok) {
+      throw new Error(`iFixit API returned ${response.status}`);
+    }
+
+    const result = await response.json();
+    const results = Array.isArray(result)
+      ? result
+      : result.results || result.items || result.data || [];
+
+    if (!results.length) {
+      return { data: null, cache: cache };
+    }
+
+    const best = results[0];
+    const score = best.repairability_score || best.score || best.repairability || null;
+    const entry = {
+      score: score !== null ? Number(score) : null,
+      title: best.title || best.name || productName,
+      url: best.url || best.web_url || null,
+      summary: best.summary || best.description || null,
+      source: "iFixit",
+      cachedAt: new Date().toISOString()
+    };
+
+    const nextCache = { ...cache, [cacheKey]: entry };
+    return { data: entry, cache: nextCache };
+  } catch (error) {
+    console.warn("⚠️ iFixit lookup failed:", error.message);
+    return { data: null, cache: cache };
+  }
+}
+
+// Test the API connection
+async function testNessieAPI(key) {
+  try {
+    const safeKey = key ? key.substring(0, 10) + "..." : "(missing)";
+    console.log("Testing API with key:", safeKey);
     console.log("Base URL:", NESSIE_BASE_URL);
     
     // Build URL carefully
-    const accountsUrl = NESSIE_BASE_URL + "/accounts?key=" + NESSIE_API_KEY;
+    const accountsUrl = NESSIE_BASE_URL + "/accounts?key=" + key;
     console.log("Full URL:", accountsUrl.substring(0, 50) + "...");
     
     const response = await fetch(accountsUrl, {
@@ -269,6 +422,24 @@ async function getAccountBalance(key, accountId) {
     console.error("Error fetching account balance:", error.message);
     throw error;
   }
+}
+
+async function getPurchaseHistory(key, accountId) {
+  if (!key || !accountId) {
+    throw new Error("Missing Nessie API key or account ID");
+  }
+
+  const url = `${NESSIE_BASE_URL}/accounts/${accountId}/purchases?key=${key}`;
+  console.log("Fetching purchase history for:", accountId);
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(`API returned ${response.status}: ${errorData.message || response.statusText}`);
+  }
+
+  const purchases = await response.json();
+  return Array.isArray(purchases) ? purchases : [];
 }
 
 /**
