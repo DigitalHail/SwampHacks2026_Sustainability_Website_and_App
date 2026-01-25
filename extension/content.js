@@ -104,7 +104,7 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     var title = getProductTitle();
     if (title) {
       console.log("🟢 Sending:", title.substring(0, 30));
-      sendResponse({ success: true, message: '✓ Detected: ' + title.substring(0, 30) });
+      sendResponse({ success: true, message: '✅ Detected: ' + title.substring(0, 30) });
       chrome.runtime.sendMessage({ type: "ANALYZE_PRODUCT", name: title });
     } else {
       sendResponse({ success: false, message: 'No product' });

@@ -3,10 +3,17 @@
   <head>
     <meta charset="UTF-8">
     <style>
+      html {
+        border-radius: 24px;
+        overflow: hidden;
+      }
       body { 
         width: 300px; 
         font-family: sans-serif; 
         padding: 10px;
+        border-radius: 24px;
+        overflow: hidden;
+        margin: 0;
       }
       input { 
         width: 100%; 
@@ -100,14 +107,26 @@
       }
       #impactSection {
         border: 2px solid #ff9800;
-        padding: 10px;
+        padding: 0;
         margin: 10px 0;
-        border-radius: 4px;
-        background-color: #fff3e0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+      }
+      #impactSection .header {
+        background: linear-gradient(135deg, #ff9800 0%, #fb8c00 100%);
+        padding: 12px;
+        color: white;
+      }
+      #impactSection .content {
+        padding: 10px;
+        background: white;
       }
       #impactSection.unsustainable {
-        background-color: #ffebee;
         border-color: #f44336;
+      }
+      #impactSection.unsustainable .header {
+        background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
       }
       #impactSection h4 {
         margin: 0 0 8px 0;
@@ -120,41 +139,150 @@
         font-size: 14px;
         line-height: 1.5;
       }
+      
+      /* Balance Section - Green Theme */
+      #balanceSection {
+        border: 2px solid #2e7d32;
+        padding: 0;
+        margin: 10px 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+      }
+      #balanceSection .header {
+        background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%);
+        padding: 12px;
+        color: white;
+      }
+      #balanceSection .content {
+        padding: 10px;
+        background: white;
+      }
+      
+      /* Repairability Section - Blue Theme */
+      #repairabilitySection {
+        border: 2px solid #1976d2;
+        padding: 0;
+        margin: 10px 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+      }
+      #repairabilitySection .header {
+        background: linear-gradient(135deg, #1976d2 0%, #1e88e5 100%);
+        padding: 12px;
+        color: white;
+      }
+      #repairabilitySection .content {
+        padding: 10px;
+        background: white;
+      }
+      
+      /* Budget Section - Purple Theme */
+      #budgetSection {
+        border: 2px solid #6a1b9a;
+        padding: 0;
+        margin: 10px 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+      }
+      #budgetSection .header {
+        background: linear-gradient(135deg, #6a1b9a 0%, #7b1fa2 100%);
+        padding: 12px;
+        color: white;
+      }
+      #budgetSection .content {
+        padding: 10px;
+        background: white;
+      }
+      
+      /* Green Alternatives Section - Eco-Green Theme */
+      #greenAlternativesSection {
+        border: 2px solid #2e7d32;
+        padding: 0;
+        margin: 10px 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+      }
+      #greenAlternativesSection .header {
+        background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%);
+        padding: 12px;
+        color: white;
+      }
+      #greenAlternativesSection .content {
+        padding: 10px;
+        background: white;
+      }
     </style>
   </head>
   <body>
-    <h3>🌍 WattWise</h3>
-  <p id="status" style="margin-bottom: 6px;">Scanning page...</p>
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+      <h3 style="font-size: 22px; margin: 0;">🌍 WattWise</h3>
+      <a href="http://localhost:3000/" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center;">
+        <img src="icons/new-gator-green.png" alt="GatorGreen" style="height: 48px; width: auto; display: block;" />
+      </a>
+    </div>
+  <p id="status" style="margin-bottom: 6px; font-size: 15px; font-weight: bold; display: flex; align-items: center; gap: 4px;">Scanning page...</p>
     
-    <div id="balanceSection" style="display:none; border: 2px solid #4CAF50; padding: 10px; margin: 10px 0; border-radius: 4px; background-color: #f0f8f0;">
-      <h4>💰 Account Balance</h4>
-      <p><strong>Main Checking:</strong> $<span id="mainBalance">0.00</span></p>
-      <p><strong>Sustainability Savings:</strong> $<span id="savingsBalance">0.00</span></p>
-      <p style="font-size: 12px; color: #666;">Last updated: <span id="lastUpdated">-</span></p>
+    <div id="balanceSection" style="display:none;">
+      <div class="header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">💰</span>
+          <span style="font-weight: bold; font-size: 14px;">Account Balance</span>
+        </div>
+      </div>
+      <div class="content">
+        <p style="margin: 4px 0;"><strong>Main Checking:</strong> $<span id="mainBalance">0.00</span></p>
+        <p style="margin: 4px 0;"><strong>Sustainability Savings:</strong> $<span id="savingsBalance">0.00</span></p>
+        <p style="font-size: 12px; color: #666; margin: 6px 0 0 0;">Last updated: <span id="lastUpdated">-</span></p>
+      </div>
     </div>
     
     <div id="impactSection" style="display:none;">
-      <h4>⚠️ Sustainability Impact</h4>
-      <div class="impact-text">
-        <p id="impactMessage"></p>
-        <p id="impactPreview" style="font-weight: bold; margin: 8px 0 0 0;"></p>
-        <p id="impactEmissions" style="font-size: 12px; margin: 6px 0 0 0;"></p>
+      <div class="header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">⚠️</span>
+          <span style="font-weight: bold; font-size: 14px;">Sustainability Impact</span>
+        </div>
+      </div>
+      <div class="content">
+        <div class="impact-text">
+          <p id="impactMessage" style="margin: 0 0 8px 0;"></p>
+          <p id="impactPreview" style="font-weight: bold; margin: 8px 0 0 0;"></p>
+          <p id="impactEmissions" style="font-size: 12px; margin: 6px 0 0 0;"></p>
+        </div>
       </div>
     </div>
 
-    <div id="repairabilitySection" style="display:none; border: 2px solid #1976d2; padding: 10px; margin: 10px 0; border-radius: 4px; background-color: #e3f2fd;">
-      <h4>🛠️ Repairability</h4>
-      <p id="repairabilityScore" style="margin: 4px 0;"></p>
-      <p id="repairabilitySummary" style="font-size: 12px; color: #555;"></p>
-      <a id="repairabilityLink" href="#" target="_blank" style="font-size: 12px; color: #1565c0; display:none;">View details</a>
+    <div id="repairabilitySection" style="display:none;">
+      <div class="header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">🛠️</span>
+          <span style="font-weight: bold; font-size: 14px;">Repairability</span>
+        </div>
+      </div>
+      <div class="content">
+        <p id="repairabilityScore" style="margin: 4px 0;"></p>
+        <p id="repairabilitySummary" style="font-size: 12px; color: #555;"></p>
+        <a id="repairabilityLink" href="#" target="_blank" style="font-size: 12px; color: #1565c0; display:none;">View details</a>
+      </div>
     </div>
 
-    <div id="budgetSection" style="display:none; border: 2px solid #6a1b9a; padding: 10px; margin: 10px 0; border-radius: 4px; background-color: #f3e5f5;">
-      <h4>📆 Monthly Carbon Budget</h4>
-      <p style="margin: 4px 0;"><strong>Budget:</strong> <span id="budgetTotal">0</span> kg CO2e</p>
-      <p style="margin: 4px 0;"><strong>Used:</strong> <span id="budgetUsed">0</span> kg CO2e</p>
-      <p style="margin: 4px 0;"><strong>Remaining:</strong> <span id="budgetRemaining">0</span> kg CO2e</p>
-      <p id="budgetPercent" style="font-size: 12px; margin: 6px 0 0 0;"></p>
+    <div id="budgetSection" style="display:none;">
+      <div class="header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">📆</span>
+          <span style="font-weight: bold; font-size: 14px;">Monthly Carbon Budget</span>
+        </div>
+      </div>
+      <div class="content">
+        <p style="margin: 4px 0;"><strong>Budget:</strong> <span id="budgetTotal">0</span> kg CO2e</p>
+        <p style="margin: 4px 0;"><strong>Used:</strong> <span id="budgetUsed">0</span> kg CO2e</p>
+        <p style="margin: 4px 0;"><strong>Remaining:</strong> <span id="budgetRemaining">0</span> kg CO2e</p>
+        <p id="budgetPercent" style="font-size: 12px; margin: 6px 0 0 0;"></p>
+      </div>
     </div>
 
     <!-- 🌱 GREEN REWARDS SECTION - Capital One Branding -->
@@ -229,13 +357,20 @@
       </div>
     </div>
 
-    <div id="greenAlternativesSection" style="display:none; border: 2px solid #2e7d32; padding: 10px; margin: 10px 0; border-radius: 4px; background-color: #e8f5e9;">
-      <h4>🌱 Green Alternatives</h4>
-      <p id="alternativesLoading" style="font-style: italic; color: #666;">Finding eco-friendly alternatives...</p>
-      <div id="alternativesList"></div>
-      <p id="alternativesNote" style="font-size: 11px; color: #555; margin-top: 8px; display:none;">
-        <em>Suggestions powered by Gemini AI. Consider refurbished/used options to reduce environmental impact.</em>
-      </p>
+    <div id="greenAlternativesSection" style="display:none;">
+      <div class="header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">🌱</span>
+          <span style="font-weight: bold; font-size: 14px;">Green Alternatives</span>
+        </div>
+      </div>
+      <div class="content">
+        <p id="alternativesLoading" style="font-style: italic; color: #666; margin: 0 0 8px 0;">Finding eco-friendly alternatives...</p>
+        <div id="alternativesList"></div>
+        <p id="alternativesNote" style="font-size: 11px; color: #555; margin-top: 8px; display:none;">
+          <em>Suggestions powered by Gemini AI. Consider refurbished/used options to reduce environmental impact.</em>
+        </p>
+      </div>
     </div>
     
     <button id="toggleSettings">
