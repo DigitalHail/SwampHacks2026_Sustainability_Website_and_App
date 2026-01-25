@@ -1,13 +1,15 @@
 function getTitle() {
-  const title = document.querySelector('#productTitle')?.innerText || 
-                document.querySelector('.sku-title h1')?.innerText || 
-                document.querySelector('h1')?.innerText;
+  var elem1 = document.querySelector('#productTitle');
+  var elem2 = document.querySelector('.sku-title h1');
+  var elem3 = document.querySelector('h1');
+  
+  var title = (elem1 && elem1.innerText) || (elem2 && elem2.innerText) || (elem3 && elem3.innerText);
   return title ? title.trim() : null;
 }
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   if (request.type === 'SCAN_PAGE') {
-    const title = getTitle();
+    var title = getTitle();
     if (title) {
       chrome.runtime.sendMessage({ type: "ANALYZE_PRODUCT", name: title });
       sendResponse({ success: true, message: '✓ Detected: ' + title.substring(0, 30) + '...' });
@@ -19,5 +21,5 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Auto-scan on load
-const initialTitle = getTitle();
+var initialTitle = getTitle();
 if (initialTitle) chrome.runtime.sendMessage({ type: "ANALYZE_PRODUCT", name: initialTitle });
