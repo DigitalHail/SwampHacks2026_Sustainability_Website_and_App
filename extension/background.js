@@ -19,6 +19,313 @@ const IFIXIT_BASE_URL = "https://www.ifixit.com/api/2.0";
 const IFIXIT_SCORE_CSV_URL = "https://docs.google.com/spreadsheets/d/1R_egXm7iwR0isCt_UxcGtheFEwLj9SNhxC5DWnAqKIc/export?format=csv";
 const IFIXIT_SCORE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// ============================================
+// 🌱 GREEN POINTS SYSTEM - Capital One Rewards
+// ============================================
+
+const POINT_RULES = {
+  // Purchase-based points
+  PRODUCT_ANALYZED: 10,
+  ECO_MERCHANT_PURCHASE: 50,
+  SECONDHAND_PURCHASE: 100,
+  HIGH_REPAIRABILITY_PURCHASE: 75,  // iFixit score 8+
+  GOOD_SUSTAINABILITY_SCORE: 50,    // Sustainability score 70+
+  
+  // Behavior-based points
+  NO_RUSH_SHIPPING: 25,
+  REUSABLE_CUP: 25,
+  MONTHLY_CARBON_REDUCTION: 200,
+  
+  // Engagement points
+  COMPLETE_ECO_CHALLENGE: 150,
+  REFER_FRIEND: 500,
+  WEEKLY_CHECK_IN: 50,
+  
+  // Penalties (negative points for high-impact purchases)
+  HIGH_CARBON_PURCHASE: -25,
+  FAST_FASHION_PURCHASE: -50
+};
+
+const TIER_THRESHOLDS = {
+  SEEDLING: 0,
+  SPROUT: 1000,
+  TREE: 5000,
+  FOREST: 10000,
+  GUARDIAN: 25000
+};
+
+const REWARDS_CATALOG = [
+  // Capital One Café Rewards
+  { id: 'cafe_drink', name: 'Free Café Drink', pointsCost: 500, icon: '☕', category: 'cafe', description: 'Any drink, any size at Capital One Café' },
+  { id: 'cafe_combo', name: 'Drink + Pastry Combo', pointsCost: 1000, icon: '🥐', category: 'cafe', description: 'Any drink plus any pastry' },
+  { id: 'cafe_credit', name: '$10 Café Credit', pointsCost: 2000, icon: '🎁', category: 'cafe', description: 'Use on anything at the café' },
+  
+  // Cash Back Rewards
+  { id: 'cashback_5', name: '$5 Cash Back', pointsCost: 5000, icon: '💰', category: 'cashback', cashValue: 5, description: 'Deposited to your account' },
+  { id: 'cashback_10', name: '$10 Cash Back', pointsCost: 10000, icon: '💵', category: 'cashback', cashValue: 10, description: 'Deposited to your account' },
+  
+  // Charity Donations
+  { id: 'plant_trees', name: 'Plant 5 Trees', pointsCost: 500, icon: '🌳', category: 'charity', charityPartner: 'One Tree Planted', donationValue: 5, description: 'via One Tree Planted' },
+  { id: 'ocean_cleanup', name: 'Ocean Cleanup', pointsCost: 1000, icon: '🐋', category: 'charity', charityPartner: 'Ocean Conservancy', donationValue: 10, description: 'Remove 5 lbs of ocean plastic' },
+  { id: 'renewable_fund', name: 'Renewable Energy Fund', pointsCost: 2000, icon: '⚡', category: 'charity', charityPartner: 'Clean Energy Fund', donationValue: 20, description: 'Support solar/wind projects' }
+];
+
+// Green Points Storage Manager
+const greenPointsStorage = {
+  async getBalance() {
+    return new Promise(resolve => {
+      chrome.storage.local.get(['greenPoints'], res => resolve(res.greenPoints || 0));
+    });
+  },
+  
+  async addPoints(points, reason) {
+    const current = await this.getBalance();
+    const newBalance = Math.max(0, current + points); // Never go below 0
+    await chrome.storage.local.set({ greenPoints: newBalance });
+    await this._logTransaction(points, reason, points > 0 ? 'earn' : 'penalty');
+    console.log(`🌱 ${points > 0 ? '+' : ''}${points} Green Points (${reason}). Balance: ${newBalance}`);
+    
+    // Check for tier upgrade
+    const tierChange = this._checkTierChange(current, newBalance);
+    if (tierChange) {
+      console.log(`🎉 Tier upgrade: ${tierChange.from} → ${tierChange.to}`);
+    }
+    
+    return { previousBalance: current, pointsAdded: points, newBalance, reason, tierChange };
+  },
+  
+  async deductPoints(points, reason) {
+    const current = await this.getBalance();
+    if (current < points) {
+      throw new Error(`Insufficient points. Have: ${current}, Need: ${points}`);
+    }
+    const newBalance = current - points;
+    await chrome.storage.local.set({ greenPoints: newBalance });
+    await this._logTransaction(-points, reason, 'redeem');
+    console.log(`🌱 -${points} Green Points (${reason}). Balance: ${newBalance}`);
+    return { previousBalance: current, pointsDeducted: points, newBalance, reason };
+  },
+  
+  getTierForPoints(points) {
+    if (points >= TIER_THRESHOLDS.GUARDIAN) return 'GUARDIAN';
+    if (points >= TIER_THRESHOLDS.FOREST) return 'FOREST';
+    if (points >= TIER_THRESHOLDS.TREE) return 'TREE';
+    if (points >= TIER_THRESHOLDS.SPROUT) return 'SPROUT';
+    return 'SEEDLING';
+  },
+  
+  async getTierProgress() {
+    const balance = await this.getBalance();
+    const currentTier = this.getTierForPoints(balance);
+    const tiers = ['SEEDLING', 'SPROUT', 'TREE', 'FOREST', 'GUARDIAN'];
+    const currentIndex = tiers.indexOf(currentTier);
+    const nextTier = currentIndex < tiers.length - 1 ? tiers[currentIndex + 1] : null;
+    
+    if (!nextTier) {
+      return {
+        currentTier,
+        nextTier: null,
+        progress: 100,
+        pointsToNext: 0,
+        currentPoints: balance,
+        message: "🎉 Max tier reached!"
+      };
+    }
+    
+    const currentThreshold = TIER_THRESHOLDS[currentTier];
+    const nextThreshold = TIER_THRESHOLDS[nextTier];
+    const pointsInTier = balance - currentThreshold;
+    const tierRange = nextThreshold - currentThreshold;
+    const progress = Math.round((pointsInTier / tierRange) * 100);
+    
+    return {
+      currentTier,
+      nextTier,
+      progress,
+      pointsToNext: nextThreshold - balance,
+      currentPoints: balance,
+      message: `${nextThreshold - balance} points to ${nextTier}`
+    };
+  },
+  
+  _checkTierChange(oldBalance, newBalance) {
+    const oldTier = this.getTierForPoints(oldBalance);
+    const newTier = this.getTierForPoints(newBalance);
+    if (oldTier !== newTier) {
+      return { upgraded: newBalance > oldBalance, from: oldTier, to: newTier };
+    }
+    return null;
+  },
+  
+  async _logTransaction(points, reason, type) {
+    const history = await new Promise(resolve => {
+      chrome.storage.local.get(['greenPointsHistory'], res => resolve(res.greenPointsHistory || []));
+    });
+    history.push({ points, reason, type, timestamp: new Date().toISOString() });
+    // Keep last 100 transactions
+    await chrome.storage.local.set({ greenPointsHistory: history.slice(-100) });
+  },
+  
+  async getHistory() {
+    return new Promise(resolve => {
+      chrome.storage.local.get(['greenPointsHistory'], res => resolve(res.greenPointsHistory || []));
+    });
+  }
+};
+
+// Calculate points for a product analysis
+function calculateProductPoints(productName, sustainabilityScore, repairability) {
+  let points = POINT_RULES.PRODUCT_ANALYZED; // Base points for using WattWise
+  const breakdown = [{ reason: 'Product analyzed with WattWise', points: POINT_RULES.PRODUCT_ANALYZED }];
+  
+  // Good sustainability score bonus
+  if (sustainabilityScore >= 70) {
+    points += POINT_RULES.GOOD_SUSTAINABILITY_SCORE;
+    breakdown.push({ reason: 'Good sustainability score (70+)', points: POINT_RULES.GOOD_SUSTAINABILITY_SCORE });
+  }
+  
+  // High repairability bonus (iFixit score 8+)
+  if (repairability && repairability.score >= 8) {
+    points += POINT_RULES.HIGH_REPAIRABILITY_PURCHASE;
+    breakdown.push({ reason: 'High repairability (iFixit 8+)', points: POINT_RULES.HIGH_REPAIRABILITY_PURCHASE });
+  }
+  
+  // Check for secondhand/refurbished keywords
+  const lowerName = productName.toLowerCase();
+  if (lowerName.includes('refurbished') || lowerName.includes('renewed') || lowerName.includes('used') || lowerName.includes('pre-owned')) {
+    points += POINT_RULES.SECONDHAND_PURCHASE;
+    breakdown.push({ reason: 'Secondhand/refurbished product', points: POINT_RULES.SECONDHAND_PURCHASE });
+  }
+  
+  // Fast fashion penalty
+  const fastFashionBrands = ['shein', 'fashion nova', 'romwe', 'zaful'];
+  if (fastFashionBrands.some(brand => lowerName.includes(brand))) {
+    points += POINT_RULES.FAST_FASHION_PURCHASE;
+    breakdown.push({ reason: 'Fast fashion brand', points: POINT_RULES.FAST_FASHION_PURCHASE });
+  }
+  
+  return { totalPoints: Math.max(0, points), breakdown };
+}
+
+// Redemption service
+async function redeemReward(rewardId, accountId) {
+  const reward = REWARDS_CATALOG.find(r => r.id === rewardId);
+  if (!reward) {
+    throw new Error(`Unknown reward: ${rewardId}`);
+  }
+  
+  const balance = await greenPointsStorage.getBalance();
+  if (balance < reward.pointsCost) {
+    throw new Error(`Insufficient points. Have: ${balance}, Need: ${reward.pointsCost}`);
+  }
+  
+  // Deduct points first
+  await greenPointsStorage.deductPoints(reward.pointsCost, `Redeemed: ${reward.name}`);
+  
+  let result;
+  
+  // Process based on reward category
+  if (reward.category === 'cafe') {
+    // Generate QR/redemption code for café
+    const code = 'WW' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
+    result = {
+      type: 'cafe',
+      code: code,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      instructions: [
+        '1. Visit any Capital One Café',
+        '2. Show this code to the barista',
+        '3. Enjoy your reward!',
+        `Valid for 24 hours`
+      ]
+    };
+  } else if (reward.category === 'cashback') {
+    // Deposit to Nessie account
+    if (accountId && NESSIE_API_KEY) {
+      try {
+        const depositUrl = `${NESSIE_BASE_URL}/accounts/${accountId}/deposits?key=${NESSIE_API_KEY}`;
+        const response = await fetch(depositUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            medium: 'balance',
+            amount: reward.cashValue,
+            transaction_date: new Date().toISOString().split('T')[0],
+            description: `WattWise Green Rewards: ${reward.name}`
+          })
+        });
+        
+        if (response.ok) {
+          const depositResult = await response.json();
+          result = {
+            type: 'cashback',
+            amount: reward.cashValue,
+            transactionId: depositResult.objectCreated?._id,
+            message: `$${reward.cashValue.toFixed(2)} deposited to your account!`
+          };
+        } else {
+          // Refund points if deposit failed
+          await greenPointsStorage.addPoints(reward.pointsCost, `Refund: ${reward.name} deposit failed`);
+          throw new Error('Deposit to account failed');
+        }
+      } catch (error) {
+        // Refund points if deposit failed
+        await greenPointsStorage.addPoints(reward.pointsCost, `Refund: ${reward.name} deposit failed`);
+        throw error;
+      }
+    } else {
+      // No account configured - refund and error
+      await greenPointsStorage.addPoints(reward.pointsCost, `Refund: No account configured`);
+      throw new Error('No Nessie account configured for cash back');
+    }
+  } else if (reward.category === 'charity') {
+    // Generate donation certificate
+    const donationId = 'DON' + Date.now().toString(36).toUpperCase();
+    result = {
+      type: 'charity',
+      charityPartner: reward.charityPartner,
+      donationValue: reward.donationValue,
+      donationId: donationId,
+      certificate: {
+        title: 'Certificate of Environmental Impact',
+        donor: 'WattWise User',
+        amount: `$${reward.donationValue.toFixed(2)}`,
+        recipient: reward.charityPartner,
+        date: new Date().toISOString(),
+        impactMessage: getCharityImpactMessage(reward.id)
+      }
+    };
+  }
+  
+  // Save redemption to history
+  await saveRedemptionHistory(reward, result);
+  
+  return { success: true, reward, result, newBalance: await greenPointsStorage.getBalance() };
+}
+
+function getCharityImpactMessage(rewardId) {
+  const messages = {
+    'plant_trees': '🌳 Your donation will plant 5 trees, absorbing ~0.5 tons of CO2 over their lifetime!',
+    'ocean_cleanup': '🌊 Your donation will remove approximately 5 lbs of plastic from the ocean!',
+    'renewable_fund': '⚡ Your donation supports clean energy projects that offset ~100 kg of CO2!'
+  };
+  return messages[rewardId] || 'Thank you for your environmental contribution!';
+}
+
+async function saveRedemptionHistory(reward, result) {
+  const history = await new Promise(resolve => {
+    chrome.storage.local.get(['redemptionHistory'], res => resolve(res.redemptionHistory || []));
+  });
+  history.push({ reward, result, timestamp: new Date().toISOString() });
+  await chrome.storage.local.set({ redemptionHistory: history.slice(-50) });
+}
+
+async function getRedemptionHistory() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(['redemptionHistory'], res => resolve(res.redemptionHistory || []));
+  });
+}
+
 console.log("🟢 [WattWise Background] Service worker loaded!");
 console.log("🔑 [WattWise Background] API Key initialized:", NESSIE_API_KEY.substring(0, 10) + "...");
 
@@ -137,7 +444,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         score: evaluation.score,
         emissions: evaluation.emissions || 0,
         reason: evaluation.reason,
-        taxAmount: evaluation.taxAmount || 0,
+        ecoBonus: evaluation.ecoBonus || 0,
         geminiContext: geminiContext,
         repairability: repairability.data,
         budgetStatus: budgetStatus,
@@ -151,6 +458,57 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       });
 
       console.log("✅ Stored product analysis and budget status");
+
+      // 🌱 Award Green Points for product analysis
+      try {
+        const pointsResult = calculateProductPoints(
+          message.name, 
+          evaluation.score, 
+          repairability.data
+        );
+        if (pointsResult.totalPoints > 0) {
+          const pointsAwarded = await greenPointsStorage.addPoints(
+            pointsResult.totalPoints, 
+            `Analyzed: ${message.name.substring(0, 30)}${message.name.length > 30 ? '...' : ''}`
+          );
+          analysis.pointsAwarded = pointsResult;
+          analysis.newPointsBalance = pointsAwarded.newBalance;
+          analysis.tierChange = pointsAwarded.tierChange;
+          console.log(`🌱 Awarded ${pointsResult.totalPoints} Green Points!`);
+        }
+      } catch (pointsError) {
+        console.warn("Points award failed:", pointsError.message);
+      }
+
+      // 💰 Deposit Eco-Bonus for sustainable products (using Nessie API)
+      if (evaluation.ecoBonus > 0 && !evaluation.isUnsustainable) {
+        try {
+          const settings = await chrome.storage.local.get(['apiKey', 'savingsAccount']);
+          const nessieKey = settings.apiKey || NESSIE_API_KEY;
+          const rewardsAccountId = settings.savingsAccount;
+          
+          if (nessieKey && rewardsAccountId) {
+            const depositResult = await depositEcoBonus(
+              nessieKey, 
+              rewardsAccountId, 
+              evaluation.ecoBonus, 
+              message.name
+            );
+            analysis.ecoBonusDeposited = true;
+            analysis.ecoBonusAmount = evaluation.ecoBonus;
+            analysis.depositTransactionId = depositResult.objectCreated?._id;
+            console.log(`💰 Eco-Bonus $${evaluation.ecoBonus.toFixed(2)} deposited to Rewards Account!`);
+          } else {
+            console.log("⚠️ Eco-Bonus earned but no Nessie account configured");
+            analysis.ecoBonusDeposited = false;
+            analysis.ecoBonusMessage = "Configure Nessie account to receive eco-bonus deposits";
+          }
+        } catch (depositError) {
+          console.warn("💰 Eco-bonus deposit failed:", depositError.message);
+          analysis.ecoBonusDeposited = false;
+          analysis.ecoBonusError = depositError.message;
+        }
+      }
 
       // Get Green Alternatives asynchronously
       if (GEMINI_API_KEY) {
@@ -224,28 +582,197 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     }
     return true;
   }
+
+  // ============================================
+  // 🌱 GREEN POINTS MESSAGE HANDLERS
+  // ============================================
+  
+  if (message.type === "GET_GREEN_POINTS") {
+    console.log("🌱 GET_GREEN_POINTS requested");
+    try {
+      const balance = await greenPointsStorage.getBalance();
+      sendResponse({ success: true, balance: balance });
+    } catch (error) {
+      console.error("GET_GREEN_POINTS error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+  
+  if (message.type === "ADD_GREEN_POINTS") {
+    console.log("🌱 ADD_GREEN_POINTS requested:", message.points, message.reason);
+    try {
+      const result = await greenPointsStorage.addPoints(message.points, message.reason);
+      sendResponse({ success: true, ...result });
+    } catch (error) {
+      console.error("ADD_GREEN_POINTS error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+  
+  if (message.type === "GET_TIER_PROGRESS") {
+    console.log("🌱 GET_TIER_PROGRESS requested");
+    try {
+      const progress = await greenPointsStorage.getTierProgress();
+      sendResponse({ success: true, ...progress });
+    } catch (error) {
+      console.error("GET_TIER_PROGRESS error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+  
+  if (message.type === "GET_REWARDS_CATALOG") {
+    console.log("🌱 GET_REWARDS_CATALOG requested, category:", message.category);
+    try {
+      const category = message.category;
+      const filtered = category && category !== 'all' 
+        ? REWARDS_CATALOG.filter(r => r.category === category)
+        : REWARDS_CATALOG;
+      sendResponse({ success: true, rewards: filtered });
+    } catch (error) {
+      console.error("GET_REWARDS_CATALOG error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+  
+  if (message.type === "REDEEM_REWARD") {
+    console.log("🌱 REDEEM_REWARD requested:", message.rewardId);
+    try {
+      const data = await chrome.storage.local.get(['mainAccount']);
+      const result = await redeemReward(message.rewardId, data.mainAccount);
+      sendResponse({ success: true, ...result });
+    } catch (error) {
+      console.error("REDEEM_REWARD error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+  
+  if (message.type === "GET_POINTS_HISTORY") {
+    console.log("🌱 GET_POINTS_HISTORY requested");
+    try {
+      const history = await greenPointsStorage.getHistory();
+      sendResponse({ success: true, history: history });
+    } catch (error) {
+      console.error("GET_POINTS_HISTORY error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+  
+  if (message.type === "GET_REDEMPTION_HISTORY") {
+    console.log("🌱 GET_REDEMPTION_HISTORY requested");
+    try {
+      const history = await getRedemptionHistory();
+      sendResponse({ success: true, history: history });
+    } catch (error) {
+      console.error("GET_REDEMPTION_HISTORY error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
+  // ============================================
+  // 💰 NESSIE ECO-REWARDS ACCOUNT HANDLERS
+  // ============================================
+  
+  if (message.type === "GET_ECO_REWARDS_BALANCE") {
+    console.log("💰 GET_ECO_REWARDS_BALANCE requested");
+    try {
+      const settings = await chrome.storage.local.get(['apiKey', 'savingsAccount']);
+      const nessieKey = settings.apiKey || NESSIE_API_KEY;
+      const rewardsAccountId = settings.savingsAccount;
+      
+      if (!nessieKey || !rewardsAccountId) {
+        sendResponse({ success: false, error: "Nessie account not configured" });
+        return true;
+      }
+      
+      const url = `${NESSIE_BASE_URL}/accounts/${rewardsAccountId}?key=${nessieKey}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch account: ${response.status}`);
+      }
+      
+      const accountData = await response.json();
+      sendResponse({ 
+        success: true, 
+        balance: accountData.balance,
+        accountId: rewardsAccountId,
+        accountNickname: accountData.nickname || 'Eco-Rewards Account',
+        accountType: accountData.type
+      });
+    } catch (error) {
+      console.error("GET_ECO_REWARDS_BALANCE error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+  
+  if (message.type === "GET_ECO_DEPOSITS_HISTORY") {
+    console.log("💰 GET_ECO_DEPOSITS_HISTORY requested");
+    try {
+      const settings = await chrome.storage.local.get(['apiKey', 'savingsAccount']);
+      const nessieKey = settings.apiKey || NESSIE_API_KEY;
+      const rewardsAccountId = settings.savingsAccount;
+      
+      if (!nessieKey || !rewardsAccountId) {
+        sendResponse({ success: false, error: "Nessie account not configured" });
+        return true;
+      }
+      
+      const url = `${NESSIE_BASE_URL}/accounts/${rewardsAccountId}/deposits?key=${nessieKey}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch deposits: ${response.status}`);
+      }
+      
+      const deposits = await response.json();
+      // Filter for eco-bonus deposits
+      const ecoDeposits = deposits.filter(d => 
+        d.description && d.description.includes('Eco-Bonus')
+      );
+      
+      sendResponse({ 
+        success: true, 
+        deposits: ecoDeposits,
+        totalDeposits: deposits.length,
+        ecoDepositsCount: ecoDeposits.length,
+        totalEcoBonus: ecoDeposits.reduce((sum, d) => sum + d.amount, 0)
+      });
+    } catch (error) {
+      console.error("GET_ECO_DEPOSITS_HISTORY error:", error.message);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
 });
 
 /**
  * Evaluate product sustainability using Climatiq API + Gemini for intelligent scoring
  * @param {string} productName - Name of the product
  * @param {object} repairability - Optional repairability data from iFixit
- * @returns {Promise<object>} Sustainability score and tax amount
+ * @returns {Promise<object>} Sustainability score and eco-bonus amount
  */
 async function evaluateSustainability(productName, repairability = null) {
   try {
     // If no Climatiq key, fall back to keyword matching
     if (!CLIMATIQ_API_KEY) {
       console.log("⚠️ No Climatiq API key - using fallback keyword matching");
-      const isUnsustainable = productName.toLowerCase().includes("plastic") || 
-                              productName.toLowerCase().includes("disposable");
-      const emissions = isUnsustainable ? 8 : 2;
+      const isSustainable = !productName.toLowerCase().includes("plastic") && 
+                            !productName.toLowerCase().includes("disposable");
+      const emissions = isSustainable ? 2 : 8;
       return {
-        isUnsustainable: isUnsustainable,
-        score: isUnsustainable ? 25 : 75,
+        isUnsustainable: !isSustainable,
+        score: isSustainable ? 75 : 25,
         emissions: emissions,
-        reason: isUnsustainable ? "Contains plastic or disposable materials" : "Sustainable product",
-        taxAmount: isUnsustainable ? 1.50 : 0
+        reason: isSustainable ? "Sustainable product choice" : "Contains plastic or disposable materials",
+        ecoBonus: isSustainable ? 0.50 : 0 // Reward sustainable purchases
       };
     }
 
@@ -295,13 +822,14 @@ async function evaluateSustainability(productName, repairability = null) {
       let score = 100 - (emissions * 15);
       score = Math.max(0, Math.min(100, score));
       
-      const taxAmount = Math.min(5.00, (emissions / 10) || 1.50);
+      // Eco-bonus for sustainable products (score >= 50)
+      const ecoBonus = score >= 50 ? calculateEcoBonus(score) : 0;
       return {
         isUnsustainable: score < 50,
         score: Math.round(score),
         emissions: emissions,
         reason: "Estimate based on product category",
-        taxAmount: Math.round(taxAmount * 100) / 100
+        ecoBonus: Math.round(ecoBonus * 100) / 100
       };
     }
     
@@ -314,13 +842,13 @@ async function evaluateSustainability(productName, repairability = null) {
       const score = await calculateGeminiSustainabilityScore(productName, emissions, repairability);
       
       if (score !== null) {
-        const taxAmount = Math.min(5.00, (emissions / 10) || 1.50);
+        const ecoBonus = score >= 50 ? calculateEcoBonus(score) : 0;
         return {
           isUnsustainable: score < 50,
           score: Math.round(score),
           emissions: emissions,
           reason: score < 50 ? `Sustainability score: ${Math.round(score)}/100 (considering carbon footprint and repairability)` : `Sustainability score: ${Math.round(score)}/100 (good environmental choice)`,
-          taxAmount: Math.round(taxAmount * 100) / 100,
+          ecoBonus: Math.round(ecoBonus * 100) / 100,
           usedGemini: true
         };
       }
@@ -331,30 +859,50 @@ async function evaluateSustainability(productName, repairability = null) {
     let score = 100 - (emissions * 10); // Simple scoring
     score = Math.max(0, Math.min(100, score)); // Clamp 0-100
 
-    // Tax based on carbon footprint
-    const taxAmount = Math.min(5.00, (emissions / 10) || 1.50); // Max $5 tax
+    // Eco-bonus reward for sustainable products
+    const ecoBonus = score >= 50 ? calculateEcoBonus(score) : 0;
 
     return {
       isUnsustainable: score < 50,
       score: Math.round(score),
       emissions: emissions,
       reason: score < 50 ? `High carbon footprint: ${emissions.toFixed(2)}kg CO2e` : `Low carbon footprint: ${emissions.toFixed(2)}kg CO2e`,
-      taxAmount: Math.round(taxAmount * 100) / 100 // Round to cents
+      ecoBonus: Math.round(ecoBonus * 100) / 100 // Round to cents
     };
   } catch (error) {
     console.error("🔴 Climatiq evaluation error:", error.message);
     // Fallback to keyword matching on error
-    const isUnsustainable = productName.toLowerCase().includes("plastic") || 
-                            productName.toLowerCase().includes("disposable");
-    const emissions = isUnsustainable ? 8 : 2;
+    const isSustainable = !productName.toLowerCase().includes("plastic") && 
+                          !productName.toLowerCase().includes("disposable");
+    const emissions = isSustainable ? 2 : 8;
     return {
-      isUnsustainable: isUnsustainable,
-      score: isUnsustainable ? 25 : 75,
+      isUnsustainable: !isSustainable,
+      score: isSustainable ? 75 : 25,
       emissions: emissions,
       reason: "Using fallback sustainability assessment",
-      taxAmount: isUnsustainable ? 1.50 : 0
+      ecoBonus: isSustainable ? 0.50 : 0
     };
   }
+}
+
+/**
+ * Calculate eco-bonus reward based on sustainability score
+ * Higher scores = higher rewards (incentivize sustainable shopping)
+ * @param {number} score - Sustainability score (0-100)
+ * @returns {number} Bonus amount in dollars
+ */
+function calculateEcoBonus(score) {
+  // Tiered bonus system:
+  // Score 90-100: $1.00 bonus (excellent choice)
+  // Score 75-89: $0.75 bonus (great choice)
+  // Score 60-74: $0.50 bonus (good choice)
+  // Score 50-59: $0.25 bonus (decent choice)
+  // Score <50: $0.00 (no bonus for unsustainable)
+  if (score >= 90) return 1.00;
+  if (score >= 75) return 0.75;
+  if (score >= 60) return 0.50;
+  if (score >= 50) return 0.25;
+  return 0;
 }
 
 /**
@@ -846,11 +1394,48 @@ async function getPurchaseHistory(key, accountId) {
 }
 
 /**
- * Performs a transfer from main account to savings account
- * This is the "Sustainability Tax" functionality
+ * Deposits eco-bonus reward money into the user's savings account
+ * This is the "Eco-Bonus Reward" functionality - rewards for sustainable choices
+ * Uses Nessie API's account deposit endpoint
  * @param {string} key - Nessie API key
- * @param {string} fromId - Main account ID
- * @param {string} toId - Savings/Sustainability account ID
+ * @param {string} accountId - Savings/Rewards account ID to deposit into
+ * @param {number} amount - Bonus amount to deposit
+ * @param {string} productName - Product that earned the bonus (for description)
+ * @returns {Promise} Deposit result
+ */
+async function depositEcoBonus(key, accountId, amount, productName = "Sustainable Purchase") {
+  const url = `${NESSIE_BASE_URL}/accounts/${accountId}/deposits?key=${key}`;
+  
+  const payload = {
+    medium: "balance",
+    amount: amount,
+    transaction_date: new Date().toISOString().split('T')[0],
+    description: `🌱 Eco-Bonus: ${productName.substring(0, 30)}`
+  };
+  
+  console.log("💚 Depositing eco-bonus reward:", payload);
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(`Eco-bonus deposit failed: ${error.message}`);
+  }
+
+  const result = await response.json();
+  console.log(`✅ Successfully deposited $${amount.toFixed(2)} eco-bonus to Rewards account!`);
+  return result;
+}
+
+/**
+ * Legacy transfer function (still available for other uses)
+ * @param {string} key - Nessie API key
+ * @param {string} fromId - Source account ID
+ * @param {string} toId - Destination account ID
  * @param {number} amount - Amount to transfer
  * @returns {Promise} Transfer result
  */
@@ -862,7 +1447,7 @@ async function performNessieTransfer(key, fromId, toId, amount) {
     payee_id: toId,
     amount: amount,
     transaction_date: new Date().toISOString().split('T')[0],
-    description: "WattWise Sustainability Offset"
+    description: "WattWise Account Transfer"
   };
   
   console.log("Initiating transfer:", payload);
@@ -879,7 +1464,7 @@ async function performNessieTransfer(key, fromId, toId, amount) {
   }
 
   const result = await response.json();
-  console.log(`✓ Successfully transferred $${amount} to Sustainability Savings!`);
+  console.log(`✓ Successfully transferred $${amount} between accounts!`);
   return result;
 }
 

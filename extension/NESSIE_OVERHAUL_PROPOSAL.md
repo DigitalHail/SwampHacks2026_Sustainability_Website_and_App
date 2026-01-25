@@ -469,6 +469,208 @@ Link multiple Nessie accounts for household-level sustainability tracking.
 
 ---
 
+## 🏦 Capital One Partnership Incentives (Key Differentiator!)
+
+Since Nessie is Capital One's API, we can propose **real-world redemption partnerships** that make eco-points tangible:
+
+### 💳 Green Points → Real Rewards
+
+#### Tier 1: Capital One Café Redemptions
+Capital One operates [Capital One Cafés](https://www.capitalone.com/local/) across the US - perfect for eco-reward redemption:
+
+```
+┌─────────────────────────────────────────────┐
+│  🎉 Redeem Your Green Points!               │
+├─────────────────────────────────────────────┤
+│                                             │
+│  Your Balance: 2,450 Green Points 🌱        │
+│                                             │
+│  ☕ Free Coffee at Capital One Café         │
+│     500 points → Any drink, any size        │
+│     [Redeem Now]                            │
+│                                             │
+│  🥐 Free Pastry + Drink Combo               │
+│     1,000 points → Breakfast on us          │
+│     [Redeem Now]                            │
+│                                             │
+│  🎁 $10 Café Credit                         │
+│     2,000 points → Use on anything          │
+│     [Redeem Now]                            │
+│                                             │
+│  💰 Cash Back to Account                    │
+│     5,000 points → $5 deposited             │
+│     [Redeem Now]                            │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+#### Tier 2: Enhanced Capital One Rewards Integration
+```javascript
+// Convert Green Points to Capital One Rewards
+async function redeemGreenPoints(points, rewardType) {
+  const CONVERSION_RATES = {
+    'cafe_coffee': { points: 500, value: 'Free drink' },
+    'cafe_combo': { points: 1000, value: 'Drink + pastry' },
+    'cafe_credit': { points: 2000, value: '$10 café credit' },
+    'cashback': { points: 5000, value: '$5.00' },
+    'venture_miles': { points: 1000, value: '100 miles' },
+    'charity_donation': { points: 500, value: '$5 to eco-charity' }
+  };
+  
+  // Use Nessie rewards system
+  const account = await getAccount(accountId);
+  if (account.rewards >= points) {
+    await deductRewards(accountId, points);
+    await issueReward(rewardType);
+    return { success: true, reward: CONVERSION_RATES[rewardType] };
+  }
+}
+```
+
+#### Tier 3: Exclusive Green Cardholder Benefits
+Propose special perks for Capital One cardholders who use WattWise:
+
+| Green Level | Points Needed | Capital One Benefit |
+|-------------|---------------|---------------------|
+| 🌱 Seedling | 0 | Basic tracking |
+| 🌿 Sprout | 1,000 | 1% extra cashback on eco-purchases |
+| 🌳 Tree | 5,000 | Free café visits (2/month) |
+| 🌲 Forest | 10,000 | Exclusive green card design |
+| 🌎 Guardian | 25,000 | APR reduction + café ambassador |
+
+### 🏪 Capital One Café Integration Features
+
+#### Café Finder with Green Points
+```javascript
+// Find nearest Capital One Café using Nessie Branch API
+async function findCapitalOneCafes(lat, lng) {
+  const branches = await fetch(
+    `${NESSIE_BASE_URL}/branches?key=${key}`
+  );
+  
+  // Filter for café locations
+  const cafes = branches.filter(b => b.name.includes('Café'));
+  
+  return cafes.map(cafe => ({
+    name: cafe.name,
+    address: cafe.address,
+    distance: calculateDistance(lat, lng, cafe.geocode),
+    hours: cafe.hours,
+    redeemableRewards: getRedeemableAtLocation(cafe._id),
+    specialOffers: getGreenSpecials(cafe._id)
+  }));
+}
+```
+
+#### In-Café Experience
+```
+┌─────────────────────────────────────────────┐
+│  📍 Capital One Café - Union Square         │
+├─────────────────────────────────────────────┤
+│                                             │
+│  You're at a Capital One Café! 🎉           │
+│                                             │
+│  Today's Green Specials:                    │
+│  ☕ Oat milk latte - 20% off with 100 pts   │
+│  🥗 Local salad bowl - FREE with 800 pts   │
+│                                             │
+│  Your Points: 2,450 🌱                      │
+│                                             │
+│  [Show QR Code to Redeem]                   │
+│                                             │
+│  ─────────────────────────────────         │
+│  💡 Tip: Bring your own cup for +25 pts!   │
+└─────────────────────────────────────────────┘
+```
+
+### 💰 Cash Back to Nessie Account
+Direct deposit green rewards back to user's account:
+
+```javascript
+async function redeemForCashback(accountId, greenPoints) {
+  const CASHBACK_RATE = 0.001; // $0.001 per point
+  const cashValue = greenPoints * CASHBACK_RATE;
+  
+  // Deposit to user's account via Nessie
+  await fetch(`${NESSIE_BASE_URL}/accounts/${accountId}/deposits?key=${key}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      medium: "balance",
+      amount: cashValue,
+      transaction_date: new Date().toISOString().split('T')[0],
+      description: "WattWise Green Points Redemption 🌱"
+    })
+  });
+  
+  return {
+    deposited: cashValue,
+    message: `$${cashValue.toFixed(2)} deposited to your account!`
+  };
+}
+```
+
+### 🎯 Why This Matters for Capital One
+
+**Pitch to Capital One:**
+1. **Customer Engagement** - Drives café foot traffic and app engagement
+2. **Brand Differentiation** - Positions Capital One as sustainability leader
+3. **Data Insights** - Understand eco-conscious spending patterns
+4. **Loyalty** - Green rewards create stickier customers
+5. **ESG Goals** - Tangible sustainability initiative for corporate reporting
+
+**User Value Proposition:**
+- "Your sustainable choices earn real rewards"
+- "Every eco-friendly purchase gets you closer to free coffee"
+- "Banking that rewards you for helping the planet"
+
+### 📱 Redemption UI Mockup
+```
+┌─────────────────────────────────────────────┐
+│  💚 Green Rewards Store                     │
+├─────────────────────────────────────────────┤
+│                                             │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│  YOUR POINTS: 2,450 🌱                      │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│                                             │
+│  🏪 CAPITAL ONE CAFÉ                        │
+│  ┌─────────────────────────────────────┐   │
+│  │ ☕ Any Drink        500 pts [GET]  │   │
+│  │ 🥐 Drink + Pastry  1000 pts [GET]  │   │
+│  │ 🎁 $10 Credit      2000 pts [GET]  │   │
+│  └─────────────────────────────────────┘   │
+│                                             │
+│  💵 CASH BACK                               │
+│  ┌─────────────────────────────────────┐   │
+│  │ 💰 $5 to Account   5000 pts [—]    │   │
+│  │ 💰 $10 to Account 10000 pts [—]    │   │
+│  └─────────────────────────────────────┘   │
+│                                             │
+│  🌍 DONATE TO CHARITY                       │
+│  ┌─────────────────────────────────────┐   │
+│  │ 🌳 Plant 5 Trees    500 pts [GET]  │   │
+│  │ 🐋 Ocean Cleanup   1000 pts [GET]  │   │
+│  │ ⚡ Renewable Fund  2000 pts [GET]  │   │
+│  └─────────────────────────────────────┘   │
+│                                             │
+│  [View Redemption History]                  │
+└─────────────────────────────────────────────┘
+```
+
+### 🔄 Points Earning Structure
+| Action | Points Earned |
+|--------|---------------|
+| Purchase from eco-merchant | +50 |
+| Buy secondhand/refurbished | +100 |
+| High iFixit score purchase (8+) | +75 |
+| Use "No Rush" shipping | +25 |
+| Monthly carbon reduction | +200 |
+| Refer a friend | +500 |
+| Bring reusable cup to café | +25 |
+| Complete eco-challenge | +150 |
+
+---
+
 ## ⚠️ Technical Considerations
 
 1. **Rate Limiting**: Nessie may have rate limits - implement request queuing

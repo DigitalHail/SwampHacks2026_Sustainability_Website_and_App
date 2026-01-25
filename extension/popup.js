@@ -125,16 +125,24 @@ function displaySustainabilityImpact(data) {
       <span style="font-size: 12px;">Score: ${data.score || 0}/100</span><br>
       <span style="font-size: 12px;">${data.reason || 'High environmental impact'}</span>
     `;
-    impactPreview.textContent = `Sustainability Tax: $${data.taxAmount.toFixed(2)} → Goes to your Sustainability Savings`;
+    impactPreview.textContent = `No eco-bonus earned - consider a greener alternative!`;
+    impactPreview.style.color = '#c62828';
   } else {
     impactSection.classList.add('sustainable');
     impactSection.classList.remove('unsustainable');
+    const bonusAmount = data.ecoBonus || 0;
     impactMessage.innerHTML = `
       <strong>✅ Sustainable Product</strong><br>
       <span style="font-size: 12px;">Score: ${data.score || 100}/100</span><br>
       <span style="font-size: 12px;">${data.reason || 'Low environmental impact'}</span>
     `;
-    impactPreview.textContent = `No tax applied - great sustainable choice!`;
+    if (bonusAmount > 0) {
+      impactPreview.innerHTML = `💰 <strong>+$${bonusAmount.toFixed(2)} Eco-Bonus</strong> deposited to your Rewards Account!`;
+      impactPreview.style.color = '#2e7d32';
+    } else {
+      impactPreview.textContent = `Great sustainable choice! 🌱`;
+      impactPreview.style.color = '#2e7d32';
+    }
   }
 
   // Show Gemini context if available
@@ -442,3 +450,343 @@ function triggerPageScan() {
     });
   });
 }
+
+// ============================================
+// 🌱 GREEN REWARDS SYSTEM
+// ============================================
+
+const TIER_EMOJIS = {
+  'SEEDLING': '🌱',
+  'SPROUT': '🌿',
+  'TREE': '🌳',
+  'FOREST': '🌲',
+  'GUARDIAN': '🌎'
+};
+
+let currentRewardCategory = 'cafe';
+let selectedReward = null;
+
+// Initialize rewards on popup load
+document.addEventListener('DOMContentLoaded', async () => {
+  await initGreenRewards();
+});
+
+async function initGreenRewards() {
+  try {
+    await updatePointsDisplay();
+    await updateTierProgress();
+    await updateEcoRewardsBalance(); // Load Nessie account balance
+    await loadRewardsCatalog(currentRewardCategory);
+    setupRewardTabs();
+    setupModalHandlers();
+  } catch (error) {
+    console.error("Error initializing green rewards:", error);
+  }
+}
+
+// 💰 Fetch and display Eco-Rewards account balance from Nessie API
+async function updateEcoRewardsBalance() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_ECO_REWARDS_BALANCE' });
+    const accountSection = document.getElementById('ecoRewardsAccount');
+    
+    if (response?.success && accountSection) {
+      accountSection.style.display = 'block';
+      
+      const balanceEl = document.getElementById('ecoRewardsBalance');
+      const nameEl = document.getElementById('ecoAccountName');
+      
+      if (balanceEl) {
+        balanceEl.textContent = `$${response.balance.toFixed(2)}`;
+      }
+      if (nameEl) {
+        nameEl.textContent = response.accountNickname || 'Eco-Rewards Account';
+      }
+      
+      // Also fetch eco-bonus deposit history to show total earned
+      const depositsResponse = await chrome.runtime.sendMessage({ type: 'GET_ECO_DEPOSITS_HISTORY' });
+      if (depositsResponse?.success) {
+        const totalEarnedEl = document.getElementById('ecoTotalEarned');
+        if (totalEarnedEl) {
+          const totalBonus = depositsResponse.totalEcoBonus || 0;
+          totalEarnedEl.textContent = `+$${totalBonus.toFixed(2)} earned from ${depositsResponse.ecoDepositsCount || 0} eco-purchases`;
+        }
+      }
+    } else if (accountSection) {
+      // Hide section if not configured
+      accountSection.style.display = 'none';
+    }
+  } catch (error) {
+    console.log("Eco-rewards account not configured:", error.message);
+    const accountSection = document.getElementById('ecoRewardsAccount');
+    if (accountSection) accountSection.style.display = 'none';
+  }
+}
+
+async function updatePointsDisplay() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_GREEN_POINTS' });
+    if (response?.success) {
+      const pointsEl = document.getElementById('pointsBalance');
+      if (pointsEl) {
+        animateNumber(pointsEl, parseInt(pointsEl.textContent) || 0, response.balance, 500);
+      }
+    }
+  } catch (error) {
+    console.error("Error updating points display:", error);
+  }
+}
+
+async function updateTierProgress() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_TIER_PROGRESS' });
+    if (response?.success) {
+      const tierNameEl = document.getElementById('tierName');
+      const tierInfoEl = document.getElementById('tierInfo');
+      const tierFillEl = document.getElementById('tierFill');
+      
+      if (tierNameEl) {
+        tierNameEl.textContent = `${TIER_EMOJIS[response.currentTier] || '🌱'} ${response.currentTier}`;
+      }
+      if (tierInfoEl) {
+        tierInfoEl.textContent = response.message;
+      }
+      if (tierFillEl) {
+        tierFillEl.style.width = `${response.progress}%`;
+      }
+    }
+  } catch (error) {
+    console.error("Error updating tier progress:", error);
+  }
+}
+
+async function loadRewardsCatalog(category = 'cafe') {
+  try {
+    const response = await chrome.runtime.sendMessage({ 
+      type: 'GET_REWARDS_CATALOG',
+      category: category
+    });
+    
+    if (response?.success) {
+      const pointsResponse = await chrome.runtime.sendMessage({ type: 'GET_GREEN_POINTS' });
+      const userBalance = pointsResponse?.balance || 0;
+      
+      const container = document.getElementById('rewardsList');
+      if (container) {
+        container.innerHTML = response.rewards.map(reward => 
+          createRewardCard(reward, userBalance)
+        ).join('');
+        
+        // Attach click handlers
+        container.querySelectorAll('.reward-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const rewardId = card.dataset.rewardId;
+            const canAfford = card.dataset.canAfford === 'true';
+            if (canAfford) {
+              openRedeemModal(rewardId, response.rewards.find(r => r.id === rewardId));
+            } else {
+              showPointsNeeded(card.dataset.pointsNeeded);
+            }
+          });
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error loading rewards catalog:", error);
+  }
+}
+
+function createRewardCard(reward, userBalance) {
+  const canAfford = userBalance >= reward.pointsCost;
+  const pointsNeeded = reward.pointsCost - userBalance;
+  
+  // Capital One branded colors
+  return `
+    <div class="reward-card" 
+         data-reward-id="${reward.id}" 
+         data-can-afford="${canAfford}"
+         data-points-needed="${pointsNeeded}"
+         style="display: flex; align-items: center; gap: 8px; padding: 8px; background: white; border: 1px solid ${canAfford ? '#004977' : '#e0e8ef'}; border-radius: 6px; cursor: ${canAfford ? 'pointer' : 'not-allowed'}; opacity: ${canAfford ? '1' : '0.7'}; margin-bottom: 6px; transition: all 0.2s;">
+      <div style="font-size: 20px; width: 32px; text-align: center;">${reward.icon}</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reward.name}</div>
+        <div style="font-size: 10px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reward.description}</div>
+      </div>
+      <div style="text-align: right;">
+        <div style="font-weight: bold; color: ${canAfford ? '#004977' : '#999'}; font-size: 13px;">${reward.pointsCost.toLocaleString()}</div>
+        <div style="font-size: 9px; color: #888;">pts</div>
+      </div>
+      <div style="padding: 4px 8px; background: ${canAfford ? '#004977' : '#ccc'}; color: white; border-radius: 4px; font-size: 10px; font-weight: bold;">
+        ${canAfford ? 'GET' : '🔒'}
+      </div>
+    </div>
+  `;
+}
+
+function setupRewardTabs() {
+  document.querySelectorAll('.reward-tab').forEach(tab => {
+    tab.addEventListener('click', async () => {
+      // Update active state - Capital One branding colors
+      document.querySelectorAll('.reward-tab').forEach(t => {
+        t.style.background = '#e8f0f5';
+        t.style.color = '#004977';
+      });
+      tab.style.background = '#004977';
+      tab.style.color = 'white';
+      
+      currentRewardCategory = tab.dataset.category;
+      await loadRewardsCatalog(currentRewardCategory);
+    });
+  });
+}
+
+function setupModalHandlers() {
+  // Redeem modal
+  document.getElementById('modalCancel')?.addEventListener('click', closeRedeemModal);
+  document.getElementById('modalConfirm')?.addEventListener('click', confirmRedemption);
+  
+  // Success modal
+  document.getElementById('successClose')?.addEventListener('click', closeSuccessModal);
+  
+  // Close modals on overlay click
+  document.getElementById('redeemModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'redeemModal') closeRedeemModal();
+  });
+  document.getElementById('successModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'successModal') closeSuccessModal();
+  });
+}
+
+function openRedeemModal(rewardId, reward) {
+  selectedReward = reward;
+  
+  document.getElementById('modalIcon').textContent = reward.icon;
+  document.getElementById('modalRewardName').textContent = reward.name;
+  document.getElementById('modalRewardDesc').textContent = reward.description;
+  document.getElementById('modalCost').textContent = reward.pointsCost.toLocaleString();
+  
+  document.getElementById('redeemModal').style.display = 'flex';
+}
+
+function closeRedeemModal() {
+  document.getElementById('redeemModal').style.display = 'none';
+  selectedReward = null;
+}
+
+async function confirmRedemption() {
+  if (!selectedReward) return;
+  
+  closeRedeemModal();
+  
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'REDEEM_REWARD',
+      rewardId: selectedReward.id
+    });
+    
+    if (response?.success) {
+      showSuccessModal(response.result);
+      await updatePointsDisplay();
+      await updateTierProgress();
+      await loadRewardsCatalog(currentRewardCategory);
+    } else {
+      alert('Redemption failed: ' + (response?.error || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+}
+
+function showSuccessModal(result) {
+  const contentEl = document.getElementById('successContent');
+  
+  if (result.type === 'cafe') {
+    contentEl.innerHTML = `
+      <div style="background: #f5f5f5; border: 2px dashed #4CAF50; border-radius: 8px; padding: 16px; margin: 12px 0;">
+        <div style="font-family: monospace; font-size: 16px; font-weight: bold; color: #4CAF50; letter-spacing: 2px;">${result.code}</div>
+      </div>
+      <div style="text-align: left; font-size: 12px; color: #666;">
+        ${result.instructions.map(i => `<p style="margin: 4px 0;">✓ ${i}</p>`).join('')}
+      </div>
+    `;
+  } else if (result.type === 'cashback') {
+    contentEl.innerHTML = `
+      <div style="font-size: 32px; margin: 12px 0;">💰</div>
+      <p style="font-size: 16px; color: #2e7d32; font-weight: bold;">${result.message}</p>
+      ${result.transactionId ? `<p style="font-size: 10px; color: #999;">Transaction: ${result.transactionId}</p>` : ''}
+    `;
+  } else if (result.type === 'charity') {
+    contentEl.innerHTML = `
+      <div style="border: 2px double #4CAF50; padding: 12px; margin: 12px 0; border-radius: 8px;">
+        <p style="font-size: 10px; color: #666; margin: 0;">Certificate of Donation</p>
+        <p style="font-size: 14px; font-weight: bold; margin: 8px 0;">${result.charityPartner}</p>
+        <p style="font-size: 18px; color: #4CAF50; font-weight: bold; margin: 4px 0;">$${result.donationValue.toFixed(2)}</p>
+        <p style="font-size: 11px; color: #555; font-style: italic; margin: 8px 0 0 0;">${result.certificate?.impactMessage || ''}</p>
+      </div>
+      <p style="font-size: 9px; color: #999;">ID: ${result.donationId}</p>
+    `;
+  }
+  
+  document.getElementById('successModal').style.display = 'flex';
+}
+
+function closeSuccessModal() {
+  document.getElementById('successModal').style.display = 'none';
+}
+
+function showPointsNeeded(pointsNeeded) {
+  const toast = document.getElementById('pointsToast');
+  if (toast) {
+    document.getElementById('pointsToastValue').textContent = pointsNeeded;
+    toast.textContent = `Need ${parseInt(pointsNeeded).toLocaleString()} more points!`;
+    toast.style.background = '#ff9800';
+    toast.style.display = 'block';
+    setTimeout(() => {
+      toast.style.display = 'none';
+    }, 2000);
+  }
+}
+
+function showPointsEarned(points) {
+  const toast = document.getElementById('pointsToast');
+  if (toast && points > 0) {
+    document.getElementById('pointsToastValue').textContent = points;
+    toast.innerHTML = `🌱 +${points} Green Points!`;
+    toast.style.background = '#4CAF50';
+    toast.style.display = 'block';
+    setTimeout(() => {
+      toast.style.display = 'none';
+    }, 3000);
+  }
+}
+
+function animateNumber(element, start, end, duration) {
+  const startTime = performance.now();
+  
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease out cubic
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const value = Math.floor(start + (end - start) * eased);
+    element.textContent = value.toLocaleString();
+    
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    }
+  }
+  
+  requestAnimationFrame(update);
+}
+
+// Listen for points awarded during product analysis
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.lastProductAnalysis) {
+    const analysis = changes.lastProductAnalysis.newValue;
+    if (analysis?.pointsAwarded?.totalPoints > 0) {
+      showPointsEarned(analysis.pointsAwarded.totalPoints);
+      updatePointsDisplay();
+      updateTierProgress();
+    }
+  }
+});
