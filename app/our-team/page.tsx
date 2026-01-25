@@ -5,26 +5,27 @@ import Image from "next/image";
 export default function OurTeamPage() {
   const team = [
     {
-      name: "Shawn Vazhappilly",
-      role: "Extension Integratier",
-      bio: "Add team member bio here",
-      image: "/shawn.png"
-    },
-    {
       name: "Ahnaf Chowdhury",
       role: "Extension Lead Developer",
-      bio: "Add team member bio here"
+      bio: "https://www.linkedin.com/in/ahnafmchowdhury/",
+      image: "/Ahnaf.png"
+    },
+    {
+      name: "Shawn Vazhappilly",
+      role: "Extension Integrator",
+      bio: "https://www.linkedin.com/in/shawn-vazhappilly-946436196/",
+      image: "/shawn.png"
     },
     {
       name: "Liam Gale",
       role: "Web Integration & Mapping Specialist",
-      bio: "Add team member bio here",
+      bio: "https://www.linkedin.com/in/liam-gale-343778361/",
       image: "/liam.jpg"
     },
     {
       name: "Ariella Efraim",
       role: "UI Designer",
-      bio: "Add team member bio here",
+      bio: "www.linkedin.com/in/ariella-efraim-633285369",
       image: "/ariella.jpg"
     }
   ];
@@ -46,8 +47,8 @@ export default function OurTeamPage() {
                     fill
                     className="object-cover"
                     style={{ 
-                      objectPosition: member.name === "Ariella Efraim" ? '80% 35%' : 'center',
-                      transform: member.name === "Liam Gale" ? 'scale(1.5)' : member.name === "Shawn Vazhappilly" ? 'scale(1.5)' : 'none'
+                      objectPosition: member.name === "Ariella Efraim" ? '80% 35%' : member.name === "Ahnaf Chowdhury" ? '70% 30%' : 'center',
+                      transform: member.name === "Liam Gale" ? 'scale(1.5)' : member.name === "Shawn Vazhappilly" ? 'scale(1.5)' : member.name === "Ahnaf Chowdhury" ? 'scale(1.3)' : 'none'
                     }}
                   />
                 ) : (
@@ -56,7 +57,13 @@ export default function OurTeamPage() {
               </div>
               <h2 className="text-2xl font-bold text-emerald-900 mb-2">{member.name}</h2>
               <p className="text-emerald-600 font-semibold mb-4">{member.role}</p>
-              <p className="text-gray-700">{member.bio}</p>
+              {(member.name === "Ariella Efraim" || member.name === "Liam Gale" || member.name === "Ahnaf Chowdhury" || member.name === "Shawn Vazhappilly") ? (
+                <a href={member.name === "Ariella Efraim" ? `https://${member.bio}` : member.bio} target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-gray-700 text-xl font-bold bg-gray-200 px-5 py-2 rounded-full inline-block">
+                  LinkedIn
+                </a>
+              ) : (
+                <p className="text-gray-700">{member.bio}</p>
+              )}
             </div>
           ))}
         </div>
