@@ -300,7 +300,7 @@ async function evaluateSustainability(productName, repairability = null) {
         isUnsustainable: score < 50,
         score: Math.round(score),
         emissions: emissions,
-        reason: "Estimate based on product category (Climatiq API unavailable)",
+        reason: "Estimate based on product category",
         taxAmount: Math.round(taxAmount * 100) / 100
       };
     }
@@ -488,7 +488,25 @@ async function updateMonthlyBudget(emissionsKg, budgetKg, storedMonthKey, stored
 }
 
 function normalizeCacheKey(productName) {
-  return productName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // Use a hash-like key that preserves model/version info
+  // This prevents iPhone 13 from colliding with iPhone 14
+  const cleaned = productName
+    .toLowerCase()
+    .replace(/\b(renewed|amazon|certified)\b/g, "")  // Remove less important words
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  
+  // Use a simple hash for consistency
+  let hash = 0;
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  
+  // Return both the cleaned name and hash to reduce collisions
+  return Math.abs(hash).toString(36) + "_" + cleaned.substring(0, 20);
 }
 
 function normalizeDeviceName(name) {
@@ -591,13 +609,19 @@ async function getRepairabilityScoreTable(cache) {
     if (!normalized) {
       return acc;
     }
+    
+    // Build iFixit Device page URL with underscores replacing spaces
+    // Example: "iPhone 15 Pro Max" → "https://www.ifixit.com/Device/iPhone_15_Pro_Max"
+    const deviceSlug = device.trim().replace(/\s+/g, "_");
+    const deviceUrl = `https://www.ifixit.com/Device/${deviceSlug}`;
+    
     acc.push({
       device: device,
       normalized: normalized,
       score: Number(score),
       oem: oemIndex >= 0 ? cols[oemIndex] : null,
       year: dateIndex >= 0 ? cols[dateIndex] : null,
-      url: `https://www.ifixit.com/Device/${encodeURIComponent(device.replace(/\s+/g, "_"))}`
+      url: deviceUrl
     });
     return acc;
   }, []);
@@ -613,26 +637,54 @@ async function getRepairabilityScoreTable(cache) {
 function findBestRepairabilityMatch(productName, entries) {
   const normalizedProduct = normalizeDeviceName(productName);
   if (!normalizedProduct || !entries || entries.length === 0) {
+    console.warn("🛠️ No match found - normalized product:", normalizedProduct, "entries available:", entries.length);
     return null;
   }
 
-  let best = null;
+  // Minimum length requirement to avoid single-character matches
+  const MIN_MATCH_LENGTH = 3;
+  
+  // Try exact match first
+  let exactMatch = null;
+  let partialMatches = [];
+  
   entries.forEach((entry) => {
-    if (!entry.normalized) {
+    if (!entry.normalized || entry.normalized.length < MIN_MATCH_LENGTH) {
       return;
     }
-    const isMatch =
-      normalizedProduct.includes(entry.normalized) ||
-      entry.normalized.includes(normalizedProduct);
-    if (!isMatch) {
+    
+    // Exact match: normalized product equals normalized entry
+    if (normalizedProduct === entry.normalized) {
+      exactMatch = entry;
       return;
     }
-    if (!best || entry.normalized.length > best.normalized.length) {
-      best = entry;
+    
+    // Partial match: one contains the other (but require min 3 chars)
+    const isPartialMatch =
+      (normalizedProduct.includes(entry.normalized) && entry.normalized.length >= MIN_MATCH_LENGTH) ||
+      (entry.normalized.includes(normalizedProduct) && normalizedProduct.length >= MIN_MATCH_LENGTH);
+    
+    if (isPartialMatch) {
+      // Prefer longer matches (more specific)
+      partialMatches.push(entry);
     }
   });
 
-  return best;
+  // Return best match in priority order
+  if (exactMatch) {
+    console.log("🛠️ Found exact match:", exactMatch.device);
+    return exactMatch;
+  }
+  
+  if (partialMatches.length > 0) {
+    // Sort by normalized length (most specific first)
+    partialMatches.sort((a, b) => b.normalized.length - a.normalized.length);
+    console.log("🛠️ Found partial match:", partialMatches[0].device, "normalized:", partialMatches[0].normalized);
+    return partialMatches[0];
+  }
+
+  console.warn("🛠️ No repairability match found for:", productName, "(normalized:", normalizedProduct + ")");
+  return null;
 }
 
 async function getRepairabilityScore(productName, enableIfixit, cache) {
@@ -642,12 +694,18 @@ async function getRepairabilityScore(productName, enableIfixit, cache) {
 
   const cacheKey = normalizeCacheKey(productName);
   const cached = cache[cacheKey];
-  if (cached && cached.cachedAt) {
+  
+  // Check if we have valid cached data
+  if (cached && cached.cachedAt && cached.source === "iFixit Repairability Scores") {
     const cachedAt = new Date(cached.cachedAt);
-    const ageDays = (Date.now() - cachedAt.getTime()) / (1000 * 60 * 60 * 24);
-    const isCurrentSource = cached.source === "iFixit Repairability Scores";
-    if (ageDays <= 30 && isCurrentSource) {
+    const ageMinutes = (Date.now() - cachedAt.getTime()) / (1000 * 60);
+    
+    // Keep cache for 24 hours (1440 minutes)
+    if (ageMinutes < 1440) {
+      console.log("🛠️ Using cached repairability data for:", productName, "- Score:", cached.score);
       return { data: cached, cache: cache };
+    } else {
+      console.log("🛠️ Cache expired for:", productName, "- Refreshing...");
     }
   }
 
