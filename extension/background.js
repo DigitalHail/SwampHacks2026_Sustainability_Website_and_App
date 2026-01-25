@@ -825,10 +825,34 @@ async function evaluateSustainability(productName, repairability = null) {
       const isKeywordUnsustainable = productName.toLowerCase().includes("plastic") || 
                                      productName.toLowerCase().includes("disposable") ||
                                      productName.toLowerCase().includes("single-use");
-      const emissions = isKeywordUnsustainable ? 5 : 1.5;
       
-      // Calculate score based on keywords
-      let score = 100 - (emissions * 15);
+      // Score calculation for keyword-based fallback
+      // Sustainable products: 70-85 (vary based on keywords present)
+      // Unsustainable products: 15-40 (vary based on negative keywords)
+      let score;
+      let emissions;
+      
+      if (isKeywordUnsustainable) {
+        // Unsustainable: starts at 35, reduced based on keyword count
+        const negativeKeywordCount = 
+          (productName.toLowerCase().includes("plastic") ? 1 : 0) +
+          (productName.toLowerCase().includes("disposable") ? 1 : 0) +
+          (productName.toLowerCase().includes("single-use") ? 1 : 0);
+        score = Math.max(15, 35 - (negativeKeywordCount * 5));
+        emissions = 5;
+      } else {
+        // Sustainable: starts at 75, increased based on positive indicators
+        const positiveKeywordCount = 
+          (productName.toLowerCase().includes("organic") ? 1 : 0) +
+          (productName.toLowerCase().includes("recycled") ? 1 : 0) +
+          (productName.toLowerCase().includes("eco") ? 1 : 0) +
+          (productName.toLowerCase().includes("green") ? 1 : 0) +
+          (productName.toLowerCase().includes("natural") ? 1 : 0) +
+          (productName.toLowerCase().includes("reusable") ? 1 : 0);
+        score = Math.min(95, 75 + (positiveKeywordCount * 3));
+        emissions = 1.5;
+      }
+      
       score = Math.max(0, Math.min(100, score));
       
       // Eco-bonus for sustainable products (score >= 50)
@@ -837,7 +861,7 @@ async function evaluateSustainability(productName, repairability = null) {
         isUnsustainable: score < 50,
         score: Math.round(score),
         emissions: emissions,
-        reason: "Estimate based on product category",
+        reason: isKeywordUnsustainable ? "Product contains unsustainable materials" : "Product appears to be a sustainable choice",
         ecoBonus: Math.round(ecoBonus * 100) / 100
       };
     }
