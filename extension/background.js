@@ -539,11 +539,20 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     try {
       const stored = await chrome.storage.local.get(["apiKey"]);
       const key = stored.apiKey || NESSIE_API_KEY;
+      
+      // Validate API key exists
+      if (!key) {
+        console.error("❌ No API key found - neither in storage nor in environment");
+        sendResponse({ success: false, error: "No API key configured. Please enter your Nessie API key in Settings." });
+        return true;
+      }
+      
+      console.log("✓ API key found, testing connection...");
       const data = await testNessieAPI(key);
       console.log("testNessieAPI success:", data);
       sendResponse({ success: true, ...data });
     } catch (error) {
-      console.error("testNessieAPI error:", error.message);
+      console.error("testNessieAPI error:", error.message, error);
       sendResponse({ success: false, error: error.message });
     }
     return true;
@@ -1297,13 +1306,22 @@ async function getRepairabilityScore(productName, enableIfixit, cache) {
 // Test the API connection
 async function testNessieAPI(key) {
   try {
-    const safeKey = key ? key.substring(0, 10) + "..." : "(missing)";
-    console.log("Testing API with key:", safeKey);
-    console.log("Base URL:", NESSIE_BASE_URL);
+    // Validate key
+    if (!key || typeof key !== 'string' || key.length < 10) {
+      throw new Error('Invalid API key format - must be at least 10 characters');
+    }
+    
+    const safeKey = key.substring(0, 10) + "...";
+    console.log("🧪 Testing API with key:", safeKey);
+    console.log("🧪 Base URL:", NESSIE_BASE_URL);
+    
+    if (!NESSIE_BASE_URL) {
+      throw new Error('NESSIE_BASE_URL not configured');
+    }
     
     // Build URL carefully
-    const accountsUrl = NESSIE_BASE_URL + "/accounts?key=" + key;
-    console.log("Full URL:", accountsUrl.substring(0, 50) + "...");
+    const accountsUrl = NESSIE_BASE_URL + "/accounts?key=" + encodeURIComponent(key);
+    console.log("🧪 Full URL:", accountsUrl.substring(0, 50) + "...");
     
     const response = await fetch(accountsUrl, {
       method: 'GET',
@@ -1312,8 +1330,8 @@ async function testNessieAPI(key) {
       }
     });
     
-    console.log("Response status:", response.status);
-    console.log("Response ok:", response.ok);
+    console.log("🧪 Response status:", response.status);
+    console.log("🧪 Response ok:", response.ok);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
@@ -1321,7 +1339,7 @@ async function testNessieAPI(key) {
     }
     
     const accounts = await response.json();
-    console.log("Nessie API returned accounts:", accounts);
+    console.log("🧪 Nessie API returned accounts:", accounts.length || 0, 'accounts');
 
     // Format accounts for display
     let accountList = [];
@@ -1341,8 +1359,8 @@ async function testNessieAPI(key) {
     };
     
   } catch (error) {
-    console.error("API Error:", error.message);
-    console.error("Error stack:", error.stack);
+    console.error("🔴 API Test Error:", error.message);
+    console.error("🔴 Error stack:", error.stack);
     throw error;
   }
 }

@@ -371,9 +371,26 @@ function initButtonListeners() {
   const testAPIBtn = document.getElementById('testAPI');
   if (testAPIBtn) {
     testAPIBtn.addEventListener('click', () => {
+      console.log('🔵 Test API button clicked');
       chrome.runtime.sendMessage({ type: 'CHECK_BALANCE' }, (response) => {
+        console.log('📨 Test API response:', response);
+        
+        // Check for runtime errors first
+        if (chrome.runtime.lastError) {
+          console.error('🔴 Chrome runtime error:', chrome.runtime.lastError.message);
+          showStatus('❌ Error: ' + chrome.runtime.lastError.message, 'error');
+          return;
+        }
+        
+        // Check if response exists
+        if (!response) {
+          console.error('🔴 No response from background script');
+          showStatus('❌ Error: No response from extension (background script may be unresponsive)', 'error');
+          return;
+        }
+        
         if (response?.success) {
-          let message = `✓ API Connected! Found ${response.data?.length || 0} accounts`;
+          let message = `✓ API Connected! Found ${response.data?.length || response.accounts?.length || 0} accounts`;
           
           // If accounts found, display them
           if (response.accounts && response.accounts.length > 0) {
@@ -392,7 +409,9 @@ function initButtonListeners() {
           
           showStatus(message, 'success');
         } else {
-          showStatus('❌ Error: ' + (response?.error || 'Unknown error'), 'error');
+          const errorMsg = response?.error || 'Unknown error - check console logs';
+          console.error('🔴 API test failed:', errorMsg);
+          showStatus('❌ Error: ' + errorMsg, 'error');
         }
       });
     });
