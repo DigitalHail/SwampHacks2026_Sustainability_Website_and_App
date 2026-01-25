@@ -348,11 +348,11 @@ export function MapComponent() {
           </button>
           <label className="flex items-center gap-1 text-sm text-gray-700">
             <input type="checkbox" checked={includeRepair} onChange={(e) => setIncludeRepair(e.target.checked)} />
-            Repair
+            Repair Shops
           </label>
           <label className="flex items-center gap-1 text-sm text-gray-700">
             <input type="checkbox" checked={includeVolunteer} onChange={(e) => setIncludeVolunteer(e.target.checked)} />
-            Volunteer
+            Volunteering
           </label>
           <label className="flex items-center gap-1 text-sm text-gray-700">
             <input type="checkbox" checked={includeRecycling} onChange={(e) => setIncludeRecycling(e.target.checked)} />
@@ -456,7 +456,7 @@ export function MapComponent() {
         {pois.length > 0 && (
           <div className="absolute left-4 top-28 z-[1000] w-80 max-h-[60vh] overflow-y-auto bg-white/95 backdrop-blur rounded-lg shadow-lg border p-3">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-emerald-800">Nearby Repair & Volunteer</h3>
+              <h3 className="text-sm font-semibold text-emerald-800">Nearby Repair Shops & Volunteering</h3>
               <span className="text-xs text-gray-600">{filteredPois.length} shown</span>
             </div>
             <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -470,13 +470,13 @@ export function MapComponent() {
                 className={`text-xs px-2 py-1 rounded border ${listFilter === 'repair' ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-orange-700 border-orange-300 hover:bg-orange-50'}`}
                 onClick={() => setListFilter('repair')}
               >
-                Repair
+                Repair Shops
               </button>
               <button
                 className={`text-xs px-2 py-1 rounded border ${listFilter === 'volunteer' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-300 hover:bg-green-50'}`}
                 onClick={() => setListFilter('volunteer')}
               >
-                Volunteer
+                Volunteering
               </button>
               <button
                 className={`text-xs px-2 py-1 rounded border ${listFilter === 'recycling' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50'}`}
