@@ -2,30 +2,50 @@
   "manifest_version": 3,
   "name": "WattWise",
   "version": "1.0.0",
-  "description": "Smart sustainable shopping assistant integrated with Gemini AI and Nessie API.",
+  "description": "Smart sustainable shopping assistant integrated with Nessie API.",
+  
   "icons": {
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+
   "action": {
     "default_popup": "popup.html",
     "default_title": "Open WattWise"
   },
+
   "background": {
     "service_worker": "background.js"
   },
+
   "content_scripts": [
     {
-      "matches": ["https://*.amazon.com/*", "https://*.bestbuy.com/*"],
+      "matches": [
+        "http://*.amazon.com/*",
+        "https://*.amazon.com/*",
+        "http://amazon.com/*",
+        "https://amazon.com/*",
+        "http://*.bestbuy.com/*",
+        "https://*.bestbuy.com/*",
+        "http://bestbuy.com/*",
+        "https://bestbuy.com/*",
+        "http://*/*",
+        "https://*/*"
+      ],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
-  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+
   "host_permissions": [
     "http://api.nessieisreal.com/*",
-    "https://generativelanguage.googleapis.com/*",
-    "https://api.climatiq.io/*",
-    "http://localhost:5000/*"
+    "https://api.nessieisreal.com/*"
   ]
 }
