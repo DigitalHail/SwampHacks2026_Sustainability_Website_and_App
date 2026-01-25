@@ -17,17 +17,18 @@ document.addEventListener('DOMContentLoaded', () => {
     'mainAccount',
     'savingsAccount',
     'climatiqKey',
+    'geminiKey',
     'carbonBudgetKg',
     'enableIfixit',
     'lastBudgetStatus',
     'lastProductAnalysis',
-    'lastPurchaseHistory',
-    'lastPurchaseHistoryAt'
+    'lastGreenAlternatives'
   ], (result) => {
     document.getElementById('apiKey').value = result.apiKey || '';
     document.getElementById('mainAccount').value = result.mainAccount || '';
     document.getElementById('savingsAccount').value = result.savingsAccount || '';
     document.getElementById('climatiqKey').value = result.climatiqKey || '';
+    document.getElementById('geminiKey').value = result.geminiKey || '';
     document.getElementById('carbonBudget').value = result.carbonBudgetKg || '';
   enableIfixitSetting = !!result.enableIfixit;
   document.getElementById('enableIfixit').checked = enableIfixitSetting;
@@ -42,8 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
       displayBudgetStatus(result.lastBudgetStatus);
     }
 
-    if (result.lastPurchaseHistory) {
-      displayPurchaseHistory(result.lastPurchaseHistory, result.lastPurchaseHistoryAt);
+    if (result.lastGreenAlternatives) {
+      displayGreenAlternatives(result.lastGreenAlternatives);
     }
   });
   
@@ -91,12 +92,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Always request fresh analysis from storage after a small delay
         // to give content script time to update it
         setTimeout(() => {
-          chrome.storage.local.get(['lastProductAnalysis'], (result) => {
+          chrome.storage.local.get(['lastProductAnalysis', 'lastGreenAlternatives'], (result) => {
             if (result.lastProductAnalysis) {
               console.log("🟢 Retrieved fresh product analysis:", result.lastProductAnalysis);
               displaySustainabilityImpact(result.lastProductAnalysis);
               displayRepairability(result.lastProductAnalysis.repairability, enableIfixitSetting);
               displayBudgetStatus(result.lastProductAnalysis.budgetStatus);
+            }
+            if (result.lastGreenAlternatives) {
+              displayGreenAlternatives(result.lastGreenAlternatives);
             }
           });
         }, 500);
@@ -133,6 +137,14 @@ function displaySustainabilityImpact(data) {
     impactPreview.textContent = `No tax applied - great sustainable choice!`;
   }
 
+  // Show Gemini context if available
+  if (data.geminiContext) {
+    const contextDiv = document.createElement('div');
+    contextDiv.style.cssText = 'margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.5); border-radius: 4px; font-size: 12px; line-height: 1.4;';
+    contextDiv.innerHTML = `<strong>🤖 AI Insight:</strong><br>${data.geminiContext}`;
+    impactMessage.appendChild(contextDiv);
+  }
+
   if (data.emissions !== undefined) {
     impactEmissions.textContent = `Estimated emissions: ${data.emissions} kg CO2e`;
   } else {
@@ -146,6 +158,7 @@ function hideAnalysisSections() {
   const impactSection = document.getElementById('impactSection');
   const repairSection = document.getElementById('repairabilitySection');
   const budgetSection = document.getElementById('budgetSection');
+  const alternativesSection = document.getElementById('greenAlternativesSection');
 
   if (impactSection) {
     impactSection.style.display = 'none';
@@ -155,6 +168,9 @@ function hideAnalysisSections() {
   }
   if (budgetSection) {
     budgetSection.style.display = 'none';
+  }
+  if (alternativesSection) {
+    alternativesSection.style.display = 'none';
   }
 }
 
@@ -211,30 +227,74 @@ function displayBudgetStatus(status) {
   section.style.display = 'block';
 }
 
-function displayPurchaseHistory(purchases, timestamp) {
-  const section = document.getElementById('purchaseHistorySection');
-  const list = document.getElementById('purchaseHistoryList');
-  const meta = document.getElementById('purchaseHistoryMeta');
+function displayGreenAlternatives(alternativesData) {
+  const section = document.getElementById('greenAlternativesSection');
+  const loading = document.getElementById('alternativesLoading');
+  const list = document.getElementById('alternativesList');
+  const note = document.getElementById('alternativesNote');
 
-  list.innerHTML = '';
-  if (!Array.isArray(purchases) || purchases.length === 0) {
-    meta.textContent = 'No purchases found.';
+  if (!alternativesData) {
+    section.style.display = 'none';
+    return;
+  }
+
+  if (alternativesData.loading) {
+    loading.style.display = 'block';
+    list.innerHTML = '';
+    note.style.display = 'none';
     section.style.display = 'block';
     return;
   }
 
-  const shown = purchases.slice(0, 5);
-  shown.forEach((purchase) => {
-    const item = document.createElement('li');
-    const amount = purchase.amount ? `$${purchase.amount.toFixed(2)}` : '$0.00';
-    item.textContent = `${purchase.description || 'Purchase'} — ${amount}`;
-    list.appendChild(item);
+  loading.style.display = 'none';
+  list.innerHTML = '';
+
+  if (alternativesData.error) {
+    list.innerHTML = `<p style="color: #c62828; font-size: 12px;">${alternativesData.error}</p>`;
+    section.style.display = 'block';
+    return;
+  }
+
+  if (!alternativesData.alternatives || alternativesData.alternatives.length === 0) {
+    list.innerHTML = '<p style="font-size: 12px; color: #666;">No green alternatives found for this product.</p>';
+    section.style.display = 'block';
+    return;
+  }
+
+  alternativesData.alternatives.forEach((alt, index) => {
+    const altDiv = document.createElement('div');
+    altDiv.style.cssText = 'padding: 8px; margin: 6px 0; background: rgba(255,255,255,0.7); border-radius: 4px; border-left: 3px solid #2e7d32;';
+    
+    let html = `<strong style="font-size: 13px;">${index + 1}. ${alt.name || 'Alternative'}</strong>`;
+    
+    if (alt.type) {
+      const typeColors = {
+        'refurbished': '#ff9800',
+        'used': '#795548',
+        'sustainable': '#4caf50',
+        'repairable': '#2196f3'
+      };
+      const color = typeColors[alt.type.toLowerCase()] || '#666';
+      html += ` <span style="font-size: 10px; background: ${color}; color: white; padding: 2px 6px; border-radius: 10px;">${alt.type}</span>`;
+    }
+    
+    if (alt.reason) {
+      html += `<p style="font-size: 11px; margin: 4px 0 0 0; color: #555;">${alt.reason}</p>`;
+    }
+    
+    if (alt.repairabilityScore !== undefined && alt.repairabilityScore !== null) {
+      html += `<p style="font-size: 11px; margin: 2px 0 0 0; color: #1976d2;">🛠️ iFixit Score: ${alt.repairabilityScore}/10</p>`;
+    }
+    
+    if (alt.searchUrl) {
+      html += `<a href="${alt.searchUrl}" target="_blank" style="font-size: 11px; color: #1565c0;">Search for this →</a>`;
+    }
+    
+    altDiv.innerHTML = html;
+    list.appendChild(altDiv);
   });
 
-  const metaText = timestamp
-    ? `Updated: ${new Date(timestamp).toLocaleString()}`
-    : 'Updated: just now';
-  meta.textContent = metaText;
+  note.style.display = 'block';
   section.style.display = 'block';
 }
 
@@ -244,6 +304,7 @@ document.getElementById('saveSettings').addEventListener('click', () => {
   const mainAccount = document.getElementById('mainAccount').value;
   const savingsAccount = document.getElementById('savingsAccount').value;
   const climatiqKey = document.getElementById('climatiqKey').value;
+  const geminiKey = document.getElementById('geminiKey').value;
   const carbonBudgetValue = document.getElementById('carbonBudget').value;
   const enableIfixit = document.getElementById('enableIfixit').checked;
   const carbonBudgetKg = carbonBudgetValue ? Number(carbonBudgetValue) : null;
@@ -258,6 +319,7 @@ document.getElementById('saveSettings').addEventListener('click', () => {
     mainAccount: mainAccount,
     savingsAccount: savingsAccount,
     climatiqKey: climatiqKey,
+    geminiKey: geminiKey,
     carbonBudgetKg: carbonBudgetKg,
     enableIfixit: enableIfixit
   }, () => {
@@ -333,47 +395,6 @@ document.getElementById('checkBalance').addEventListener('click', async () => {
       document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
       balanceSection.style.display = 'block';
       showStatus('✓ Balances updated!', 'success');
-    } else {
-      showStatus('❌ Error: ' + (response?.error || 'Unknown error'), 'error');
-    }
-  } catch (error) {
-    showStatus('❌ Error: ' + error.message, 'error');
-  }
-});
-
-document.getElementById('loadHistory').addEventListener('click', async () => {
-  const section = document.getElementById('purchaseHistorySection');
-  const icon = document.getElementById('historyToggleIcon');
-  const isOpen = section.style.display === 'block';
-
-  if (isOpen) {
-    section.style.display = 'none';
-    icon.textContent = '▼';
-    return;
-  }
-
-  icon.textContent = '▲';
-  section.style.display = 'block';
-
-  try {
-    const data = await chrome.storage.local.get(['apiKey', 'mainAccount']);
-    const apiKey = data.apiKey;
-    const mainAccountId = data.mainAccount;
-
-    if (!apiKey || !mainAccountId) {
-      showStatus('❌ Please configure Nessie settings first', 'error');
-      return;
-    }
-
-    const response = await chrome.runtime.sendMessage({
-      type: 'GET_PURCHASE_HISTORY',
-      apiKey: apiKey,
-      accountId: mainAccountId
-    });
-
-    if (response?.success) {
-      displayPurchaseHistory(response.purchases, new Date().toISOString());
-      showStatus('✓ Purchase history loaded', 'success');
     } else {
       showStatus('❌ Error: ' + (response?.error || 'Unknown error'), 'error');
     }

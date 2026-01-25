@@ -50,6 +50,7 @@
     "https://api.climatiq.io/*",
     "https://www.ifixit.com/api/*",
     "https://docs.google.com/*",
-    "https://*.googleusercontent.com/*"
+    "https://*.googleusercontent.com/*",
+    "https://generativelanguage.googleapis.com/*"
   ]
 }

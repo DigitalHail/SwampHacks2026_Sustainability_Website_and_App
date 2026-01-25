@@ -10,6 +10,10 @@ const CLIMATIQ_BASE_URL = "https://api.climatiq.io/estimate";
 // You can get a free API key at https://climatiq.io/
 let CLIMATIQ_API_KEY = "40D52DBM4D1BVC4E7M1GTAEKDR";
 
+// Gemini API for AI-powered insights
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+let GEMINI_API_KEY = "";
+
 // iFixit API for repairability scores (optional)
 const IFIXIT_BASE_URL = "https://www.ifixit.com/api/2.0";
 const IFIXIT_SCORE_CSV_URL = "https://docs.google.com/spreadsheets/d/1R_egXm7iwR0isCt_UxcGtheFEwLj9SNhxC5DWnAqKIc/export?format=csv";
@@ -56,10 +60,14 @@ chrome.storage.sync.get(['nessieApiKey', 'climatiqApiKey'], (result) => {
 });
 
 // Also check local storage for recently saved keys
-chrome.storage.local.get(['climatiqKey'], (result) => {
+chrome.storage.local.get(['climatiqKey', 'geminiKey'], (result) => {
   if (result.climatiqKey) {
     CLIMATIQ_API_KEY = result.climatiqKey;
     console.log("🔑 [WattWise Background] Climatiq key loaded from local");
+  }
+  if (result.geminiKey) {
+    GEMINI_API_KEY = result.geminiKey;
+    console.log("🔑 [WattWise Background] Gemini key loaded from local");
   }
 });
 
@@ -74,6 +82,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       "mainAccount",
       "savingsAccount",
       "climatiqKey",
+      "geminiKey",
       "enableIfixit",
       "carbonBudgetKg",
       "carbonMonthKey",
@@ -87,6 +96,9 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     }
     if (data.climatiqKey) {
       CLIMATIQ_API_KEY = data.climatiqKey;
+    }
+    if (data.geminiKey) {
+      GEMINI_API_KEY = data.geminiKey;
     }
 
     try {
@@ -108,6 +120,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         data.carbonEmissionsKg
       );
 
+      // Get Gemini context for sustainability impact
+      let geminiContext = null;
+      if (GEMINI_API_KEY) {
+        geminiContext = await getGeminiSustainabilityContext(
+          message.name,
+          evaluation,
+          repairability.data
+        );
+      }
+
       const analysis = {
         name: message.name,
         isUnsustainable: evaluation.isUnsustainable,
@@ -115,6 +137,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         emissions: evaluation.emissions || 0,
         reason: evaluation.reason,
         taxAmount: evaluation.taxAmount || 0,
+        geminiContext: geminiContext,
         repairability: repairability.data,
         budgetStatus: budgetStatus,
         analyzedAt: new Date().toISOString()
@@ -127,6 +150,18 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       });
 
       console.log("✅ Stored product analysis and budget status");
+
+      // Get Green Alternatives asynchronously
+      if (GEMINI_API_KEY) {
+        getGreenAlternatives(message.name, repairability.cache).then((alternatives) => {
+          chrome.storage.local.set({ lastGreenAlternatives: alternatives });
+        }).catch((err) => {
+          console.warn("Green alternatives failed:", err.message);
+          chrome.storage.local.set({ 
+            lastGreenAlternatives: { error: "Could not load alternatives" }
+          });
+        });
+      }
 
       sendResponse({
         success: true,
@@ -677,5 +712,213 @@ async function fetchNessieData(productName) {
   } catch (error) {
     console.error("Nessie API Error:", error);
     throw error;
+  }
+}
+
+/**
+ * Get Gemini AI context for sustainability impact
+ * Contextualizes Climatiq emissions data and iFixit repairability score
+ */
+async function getGeminiSustainabilityContext(productName, evaluation, repairability) {
+  if (!GEMINI_API_KEY) {
+    console.log("🤖 No Gemini API key configured");
+    return null;
+  }
+
+  try {
+    console.log("🤖 Calling Gemini for sustainability context...");
+    
+    const emissionsInfo = evaluation.emissions 
+      ? `Estimated carbon footprint: ${evaluation.emissions} kg CO2e.` 
+      : "Carbon footprint data unavailable.";
+    
+    const repairInfo = repairability && repairability.score !== null
+      ? `iFixit repairability score: ${repairability.score}/10 (${repairability.summary || 'No details'})`
+      : "No repairability score available for this product.";
+
+    const prompt = `You are a sustainability expert. Briefly analyze this product's environmental impact in 2-3 sentences.
+
+Product: ${productName}
+Sustainability Score: ${evaluation.score}/100
+${emissionsInfo}
+${repairInfo}
+
+Provide actionable context about what this means for the environment and the consumer. Be concise and helpful.`;
+
+    const requestUrl = `${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`;
+    console.log("🤖 Gemini URL:", GEMINI_BASE_URL);
+    
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          maxOutputTokens: 150,
+          temperature: 0.7
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("🤖 Gemini API error:", response.status, errorText);
+      
+      // More graceful error handling
+      if (response.status === 429) {
+        console.warn("🤖 Gemini quota exceeded - will retry with fallback");
+        return "Unable to generate AI context at this time (API quota exceeded). Please check your Gemini API plan.";
+      }
+      return null;
+    }
+
+    const data = await response.json();
+    console.log("🤖 Gemini response:", data);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    return text || null;
+  } catch (error) {
+    console.error("🤖 Gemini context error:", error.message);
+    return null;
+  }
+}
+
+/**
+ * Get green alternatives for a product using Gemini AI
+ * Suggests refurbished, used, or sustainably produced alternatives
+ */
+async function getGreenAlternatives(productName, ifixitCache) {
+  if (!GEMINI_API_KEY) {
+    console.log("🌱 No Gemini API key for alternatives");
+    return { error: "Gemini API key not configured" };
+  }
+
+  try {
+    console.log("🌱 Getting green alternatives for:", productName);
+    
+    // Get the iFixit score table for reference
+    let repairableDevices = [];
+    try {
+      const table = await getRepairabilityScoreTable(ifixitCache || {});
+      // Get top 10 most repairable devices
+      repairableDevices = table.entries
+        .filter(e => e.score >= 7)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10)
+        .map(e => `${e.device} (Score: ${e.score}/10)`);
+    } catch (e) {
+      console.warn("Could not load iFixit data for alternatives:", e.message);
+    }
+
+    const ifixitContext = repairableDevices.length > 0
+      ? `Here are some highly repairable devices from iFixit's database: ${repairableDevices.join(", ")}.`
+      : "";
+
+    const prompt = `You are an eco-conscious shopping assistant. Suggest 3-4 greener alternatives to this product.
+
+Product being viewed: ${productName}
+
+${ifixitContext}
+
+For each alternative, provide:
+1. A specific product name
+2. Type: "refurbished", "used", "sustainable", or "repairable"
+3. A brief reason why it's more eco-friendly (1 sentence)
+
+Focus on:
+- Refurbished or certified renewed versions of the same/similar product
+- Used options that extend product lifecycle
+- More repairable alternatives (if applicable, reference iFixit scores)
+- Products from brands known for sustainability
+
+Return JSON array format:
+[{"name": "Product Name", "type": "refurbished|used|sustainable|repairable", "reason": "Why it's greener", "repairabilityScore": null or number}]`;
+
+    console.log("🌱 Calling Gemini for alternatives...");
+    const requestUrl = `${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`;
+    
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          maxOutputTokens: 500,
+          temperature: 0.7
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("🌱 Gemini alternatives API error:", response.status, errText);
+      
+      if (response.status === 429) {
+        console.warn("🌱 Gemini quota exceeded for alternatives");
+        return { 
+          error: "API quota exceeded",
+          alternatives: [{
+            name: "Check your Gemini API plan",
+            type: "sustainable",
+            reason: "The alternative suggestions feature temporarily unavailable due to API quota limits."
+          }]
+        };
+      }
+      
+      return { error: "Could not generate alternatives" };
+    }
+
+    const data = await response.json();
+    console.log("🌱 Gemini alternatives response:", data);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!text) {
+      return { error: "No alternatives found" };
+    }
+
+    // Parse JSON from response (handle markdown code blocks)
+    let cleanedText = text.trim();
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.slice(7);
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.slice(3);
+    }
+    if (cleanedText.endsWith("```")) {
+      cleanedText = cleanedText.slice(0, -3);
+    }
+    cleanedText = cleanedText.trim();
+
+    try {
+      const alternatives = JSON.parse(cleanedText);
+      
+      // Add search URLs for each alternative
+      alternatives.forEach(alt => {
+        const searchQuery = encodeURIComponent(alt.name + " " + (alt.type || ""));
+        alt.searchUrl = `https://www.google.com/search?q=${searchQuery}`;
+      });
+
+      console.log("🌱 Parsed alternatives:", alternatives);
+      return { alternatives: alternatives };
+    } catch (parseError) {
+      console.warn("Could not parse Gemini alternatives JSON:", parseError.message, cleanedText);
+      // Return as raw text fallback
+      return { 
+        alternatives: [{
+          name: "See AI suggestions",
+          type: "sustainable",
+          reason: text.substring(0, 200)
+        }]
+      };
+    }
+  } catch (error) {
+    console.error("Green alternatives error:", error.message);
+    return { error: error.message };
   }
 }
