@@ -1,15 +1,27 @@
 let enableIfixitSetting = false;
 
-// Load saved settings when popup opens
-document.addEventListener('DOMContentLoaded', () => {
+// ============================================
+// 🚀 MAIN INITIALIZATION FUNCTION
+// ============================================
+function initPopup() {
+  console.log('🔵 [WattWise Popup] initPopup() called, readyState:', document.readyState);
+  
   // Toggle settings panel
   const toggleBtn = document.getElementById('toggleSettings');
   const settingsPanel = document.getElementById('settingsPanel');
+  
+  if (!toggleBtn || !settingsPanel) {
+    console.error('🔴 [WattWise Popup] Critical elements not found!');
+    return;
+  }
+  
   const settingsIcon = toggleBtn.querySelector('.settings-icon');
   
   toggleBtn.addEventListener('click', () => {
     settingsPanel.classList.toggle('hidden');
-    settingsIcon.textContent = settingsPanel.classList.contains('hidden') ? '▼' : '▲';
+    if (settingsIcon) {
+      settingsIcon.textContent = settingsPanel.classList.contains('hidden') ? '▼' : '▲';
+    }
   });
   
   chrome.storage.local.get([
@@ -107,7 +119,17 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   });
-});
+  
+  console.log('🔵 [WattWise Popup] initPopup() complete');
+}
+
+// Initialize when DOM is ready - handles case where DOM might already be loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPopup);
+} else {
+  // DOM already loaded, call immediately
+  initPopup();
+}
 
 // Display sustainability impact warning
 function displaySustainabilityImpact(data) {
@@ -437,10 +459,21 @@ function initButtonListeners() {
       }
     });
   }
+  
+  console.log('🔘 [WattWise Popup] Button listeners initialized:', {
+    saveSettings: !!document.getElementById('saveSettings'),
+    testAPI: !!document.getElementById('testAPI'),
+    checkBalance: !!document.getElementById('checkBalance'),
+    clearCache: !!clearCacheBtn
+  });
 }
 
-// Initialize button listeners when DOM is ready
-document.addEventListener('DOMContentLoaded', initButtonListeners);
+// Initialize button listeners - handle case where DOM is already loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initButtonListeners);
+} else {
+  initButtonListeners();
+}
 
 function showStatus(message, type) {
   const statusDiv = document.getElementById('settingsStatus');
