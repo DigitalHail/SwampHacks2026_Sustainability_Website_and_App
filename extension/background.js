@@ -454,13 +454,20 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         );
       }
 
+      // Calculate eco-bonus as percentage of purchase price
+      const purchasePrice = message.purchasePrice || 0;
+      const ecoBonusPercentage = evaluation.score >= 50 ? calculateEcoBonus(evaluation.score) : 0;
+      const ecoBonusAmount = purchasePrice > 0 ? purchasePrice * ecoBonusPercentage : 0;
+
       const analysis = {
         name: message.name,
         isUnsustainable: evaluation.isUnsustainable,
         score: evaluation.score,
         emissions: evaluation.emissions || 0,
         reason: evaluation.reason,
-        ecoBonus: evaluation.ecoBonus || 0,
+        purchasePrice: purchasePrice,
+        ecoBonusPercentage: ecoBonusPercentage,
+        ecoBonusAmount: ecoBonusAmount,
         geminiContext: geminiContext,
         repairability: repairability.data,
         budgetStatus: budgetStatus,
@@ -497,7 +504,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       }
 
       // 💰 Deposit Eco-Bonus for sustainable products (using Nessie API)
-      if (evaluation.ecoBonus > 0 && !evaluation.isUnsustainable) {
+      if (analysis.ecoBonusAmount > 0 && !analysis.isUnsustainable) {
         try {
           const settings = await chrome.storage.local.get(['apiKey', 'savingsAccount']);
           const nessieKey = settings.apiKey || NESSIE_API_KEY;
@@ -507,13 +514,12 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
             const depositResult = await depositEcoBonus(
               nessieKey, 
               rewardsAccountId, 
-              evaluation.ecoBonus, 
+              analysis.ecoBonusAmount, 
               message.name
             );
             analysis.ecoBonusDeposited = true;
-            analysis.ecoBonusAmount = evaluation.ecoBonus;
             analysis.depositTransactionId = depositResult.objectCreated?._id;
-            console.log(`💰 Eco-Bonus $${evaluation.ecoBonus.toFixed(2)} deposited to Rewards Account!`);
+            console.log(`💰 Eco-Bonus $${analysis.ecoBonusAmount.toFixed(2)} (${(analysis.ecoBonusPercentage * 100).toFixed(1)}%) deposited to Rewards Account!`);
           } else {
             console.log("⚠️ Eco-Bonus earned but no Nessie account configured");
             analysis.ecoBonusDeposited = false;
@@ -796,8 +802,7 @@ async function evaluateSustainability(productName, repairability = null) {
         isUnsustainable: !isSustainable,
         score: isSustainable ? 75 : 25,
         emissions: emissions,
-        reason: isSustainable ? "Sustainable product choice" : "Contains plastic or disposable materials",
-        ecoBonus: isSustainable ? 0.50 : 0 // Reward sustainable purchases
+        reason: isSustainable ? "Sustainable product choice" : "Contains plastic or disposable materials"
       };
     }
 
@@ -868,8 +873,7 @@ async function evaluateSustainability(productName, repairability = null) {
         isUnsustainable: score < 50,
         score: Math.round(score),
         emissions: emissions,
-        reason: score < 50 ? "Product has higher environmental impact" : "Product has lower environmental impact",
-        ecoBonus: Math.round(ecoBonus * 100) / 100
+        reason: score < 50 ? "Product has higher environmental impact" : "Product has lower environmental impact"
       };
     }
     
@@ -888,7 +892,6 @@ async function evaluateSustainability(productName, repairability = null) {
           score: Math.round(score),
           emissions: emissions,
           reason: score < 50 ? `Sustainability score: ${Math.round(score)}/100 (considering carbon footprint and repairability)` : `Sustainability score: ${Math.round(score)}/100 (good environmental choice)`,
-          ecoBonus: Math.round(ecoBonus * 100) / 100,
           usedGemini: true
         };
       }
@@ -906,8 +909,7 @@ async function evaluateSustainability(productName, repairability = null) {
       isUnsustainable: score < 50,
       score: Math.round(score),
       emissions: emissions,
-      reason: score < 50 ? `High carbon footprint: ${emissions.toFixed(2)}kg CO2e` : `Low carbon footprint: ${emissions.toFixed(2)}kg CO2e`,
-      ecoBonus: Math.round(ecoBonus * 100) / 100 // Round to cents
+      reason: score < 50 ? `High carbon footprint: ${emissions.toFixed(2)}kg CO2e` : `Low carbon footprint: ${emissions.toFixed(2)}kg CO2e`
     };
   } catch (error) {
     console.error("🔴 Climatiq evaluation error:", error.message);
@@ -919,29 +921,29 @@ async function evaluateSustainability(productName, repairability = null) {
       isUnsustainable: !isSustainable,
       score: isSustainable ? 75 : 25,
       emissions: emissions,
-      reason: "Using fallback sustainability assessment",
-      ecoBonus: isSustainable ? 0.50 : 0
+      reason: "Using fallback sustainability assessment"
     };
   }
 }
 
 /**
- * Calculate eco-bonus reward based on sustainability score
- * Higher scores = higher rewards (incentivize sustainable shopping)
+ * Calculate eco-bonus reward percentage based on sustainability score
+ * Returns a percentage of the purchase amount to deposit to green rewards account
  * @param {number} score - Sustainability score (0-100)
- * @returns {number} Bonus amount in dollars
+ * @returns {number} Bonus percentage as decimal (0.02 = 2%, 0.015 = 1.5%, etc)
  */
 function calculateEcoBonus(score) {
-  // Tiered bonus system:
-  // Score 90-100: $1.00 bonus (excellent choice)
-  // Score 75-89: $0.75 bonus (great choice)
-  // Score 60-74: $0.50 bonus (good choice)
-  // Score 50-59: $0.25 bonus (decent choice)
-  // Score <50: $0.00 (no bonus for unsustainable)
-  if (score >= 90) return 1.00;
-  if (score >= 75) return 0.75;
-  if (score >= 60) return 0.50;
-  if (score >= 50) return 0.25;
+  // Tiered percentage system based on sustainability score
+  // Percentage of purchase amount deposited to green rewards account
+  // Score 90-100: 2.0% of purchase (excellent choice)
+  // Score 75-89: 1.5% of purchase (great choice)
+  // Score 60-74: 1.0% of purchase (good choice)
+  // Score 50-59: 0.5% of purchase (decent choice)
+  // Score <50: 0.0% (no reward for unsustainable)
+  if (score >= 90) return 0.02;  // 2%
+  if (score >= 75) return 0.015; // 1.5%
+  if (score >= 60) return 0.01;  // 1%
+  if (score >= 50) return 0.005; // 0.5%
   return 0;
 }
 
