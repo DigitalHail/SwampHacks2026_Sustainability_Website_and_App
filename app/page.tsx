@@ -107,8 +107,10 @@ function FadingBox({ visible }: { visible: boolean }) {
       }`}
       style={{ maxWidth: "100%", zIndex: 3100 }}
     >
-      <p className="text-lg md:text-xl text-emerald-900 leading-relaxed">
-        GatorGreen helps you find and track eco-friendly opportunities, learn practical tips, and see your impact over time.
+      <p className="text-2xl md:text-3xl text-emerald-900 leading-relaxed">
+        Gator Green is a sustainability-focused venture which provides an interactive map that helps users discover nearby volunteering and community service opportunities. It also offers a Chrome extension called WattWise, which evaluates the sustainability of consumer products using factors such as carbon dioxide emissions, repairability, and AI-driven analysis.
+        <br /><br />
+        By tracking and managing a user's carbon footprint, the platform recommends more sustainable purchasing choices and raises awareness of the environmental impact of everyday consumer decisions.
       </p>
     </div>
   );

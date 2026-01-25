@@ -6,24 +6,24 @@ export default function OurTeamPage() {
   const team = [
     {
       name: "Shawn Vazhappilly",
-      role: "Role",
+      role: "Extension Integratier",
       bio: "Add team member bio here",
       image: "/shawn.png"
     },
     {
       name: "Ahnaf Chowdhury",
-      role: "Role",
+      role: "Extension Lead Developer",
       bio: "Add team member bio here"
     },
     {
       name: "Liam Gale",
-      role: "Role",
+      role: "Web Integration & Mapping Specialist",
       bio: "Add team member bio here",
       image: "/liam.jpg"
     },
     {
       name: "Ariella Efraim",
-      role: "Role",
+      role: "UI Designer",
       bio: "Add team member bio here",
       image: "/ariella.jpg"
     }
