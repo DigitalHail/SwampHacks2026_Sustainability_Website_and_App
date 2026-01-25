@@ -487,9 +487,65 @@ function Header() {
             className: "w-full px-4 py-3 flex items-center justify-between",
             children: [
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    className: "text-2xl font-bold text-emerald-900",
-                    children: "WattWise"
-                }, void 0, false, {
+                    className: "flex items-center gap-3 text-2xl font-bold text-emerald-900",
+                    children: [
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
+                            className: "w-9 h-9 flex-shrink-0 self-end translate-y-1",
+                            viewBox: "0 0 64 64",
+                            xmlns: "http://www.w3.org/2000/svg",
+                            "aria-hidden": true,
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
+                                    x: "8",
+                                    y: "8",
+                                    width: "48",
+                                    height: "28",
+                                    rx: "3",
+                                    fill: "#34d399"
+                                }, void 0, false, {
+                                    fileName: "[project]/components/Header.tsx",
+                                    lineNumber: 12,
+                                    columnNumber: 13
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
+                                    x: "12",
+                                    y: "12",
+                                    width: "40",
+                                    height: "20",
+                                    rx: "2",
+                                    fill: "#b7f5d7"
+                                }, void 0, false, {
+                                    fileName: "[project]/components/Header.tsx",
+                                    lineNumber: 13,
+                                    columnNumber: 13
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
+                                    x: "6",
+                                    y: "38",
+                                    width: "52",
+                                    height: "6",
+                                    rx: "1",
+                                    fill: "#34d399"
+                                }, void 0, false, {
+                                    fileName: "[project]/components/Header.tsx",
+                                    lineNumber: 14,
+                                    columnNumber: 13
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/components/Header.tsx",
+                            lineNumber: 11,
+                            columnNumber: 11
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                            children: "WattWise"
+                        }, void 0, false, {
+                            fileName: "[project]/components/Header.tsx",
+                            lineNumber: 16,
+                            columnNumber: 11
+                        }, this)
+                    ]
+                }, void 0, true, {
                     fileName: "[project]/components/Header.tsx",
                     lineNumber: 10,
                     columnNumber: 9
@@ -503,7 +559,7 @@ function Header() {
                             children: "Home"
                         }, void 0, false, {
                             fileName: "[project]/components/Header.tsx",
-                            lineNumber: 12,
+                            lineNumber: 19,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$link$2e$js__$5b$client$5d$__$28$ecmascript$29$__["default"], {
@@ -512,13 +568,13 @@ function Header() {
                             children: "Settings"
                         }, void 0, false, {
                             fileName: "[project]/components/Header.tsx",
-                            lineNumber: 13,
+                            lineNumber: 20,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/Header.tsx",
-                    lineNumber: 11,
+                    lineNumber: 18,
                     columnNumber: 9
                 }, this)
             ]
@@ -560,15 +616,15 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$Header$2e$tsx_
 ;
 ;
 function MyApp({ Component, pageProps }) {
-    // create a small SVG favicon colored to match WattWise (emerald)
+    // small SVG favicon: laptop logo (screen + lighter inset + base)
     const svg = `
     <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
-      <!-- simple stylized foot silhouette -->
-      <path d='M48 16c-3-4-8-6-12-5-3 1-5 3-6 6-1 2-4 3-6 3-3 0-6 2-8 5-3 4-4 10-2 15 2 6 7 10 13 12 6 2 13 1 18-3 5-4 8-11 7-18-1-6-4-11-4-15z' fill='#34d399' stroke='#0f5132' stroke-width='0.6'/>
-      <!-- toe accents -->
-      <g fill='%23ffffff' opacity='0.95' font-family='Arial, sans-serif' font-weight='700' font-size='22' text-anchor='middle'>
-        <text x='50%' y='54%' dominant-baseline='middle'>W</text>
-      </g>
+      <!-- screen outer -->
+      <rect x='8' y='8' width='48' height='28' rx='3' fill='#34d399'/>
+      <!-- inner screen (lighter) -->
+      <rect x='12' y='12' width='40' height='20' rx='2' fill='#b7f5d7'/>
+      <!-- hinge / base (match outer screen color) -->
+      <rect x='6' y='38' width='52' height='6' rx='1' fill='#34d399'/>
     </svg>`;
     const favicon = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["Fragment"], {
