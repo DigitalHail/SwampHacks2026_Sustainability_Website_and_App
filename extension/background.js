@@ -18,6 +18,31 @@ const IFIXIT_SCORE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 console.log("🟢 [WattWise Background] Service worker loaded!");
 console.log("🔑 [WattWise Background] API Key initialized:", NESSIE_API_KEY.substring(0, 10) + "...");
 
+function requestScan(tabId, url, reason) {
+  if (!tabId || !url || !(url.startsWith("http://") || url.startsWith("https://"))) {
+    return;
+  }
+  console.log(`🔄 [WattWise Background] Requesting scan (${reason}):`, url);
+  chrome.tabs.sendMessage(tabId, { type: "SCAN_PAGE" }, () => {
+    if (chrome.runtime.lastError) {
+      console.log("🟡 [WattWise Background] Scan message failed:", chrome.runtime.lastError.message);
+    }
+  });
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete") {
+    return;
+  }
+  requestScan(tabId, tab && tab.url, "navigation");
+});
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  chrome.tabs.get(activeInfo.tabId, (tab) => {
+    requestScan(activeInfo.tabId, tab && tab.url, "activation");
+  });
+});
+
 // Load API keys from Chrome storage on startup
 chrome.storage.sync.get(['nessieApiKey', 'climatiqApiKey'], (result) => {
   if (result.nessieApiKey) {
