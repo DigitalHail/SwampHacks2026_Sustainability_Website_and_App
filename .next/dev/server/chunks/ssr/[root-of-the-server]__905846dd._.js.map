@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/dskal/.vscode/GatorGreen/app/layout.tsx"],"sourcesContent":["\"use client\";\r\n\r\nimport { QueryClient, QueryClientProvider } from \"@tanstack/react-query\";\r\nimport { ReactNode } from \"react\";\r\nimport \"./globals.css\";\r\n\r\nconst queryClient = new QueryClient();\r\n\r\nexport const metadata = {\r\n  title: \"GatorGreen\",\r\n  description: \"Environmental opportunities and sustainability platform\",\r\n};\r\n\r\nexport default function RootLayout({ children }: { children: ReactNode }) {\r\n  return (\r\n    <html lang=\"en\">\r\n      <body>\r\n        <QueryClientProvider client={queryClient}>\r\n          {children}\r\n        </QueryClientProvider>\r\n      </body>\r\n    </html>\r\n  );\r\n}\r\n"],"names":[],"mappings":";;;;;;;AAEA;AAAA;AAFA;;;;AAMA,MAAM,cAAc,IAAI,4LAAW;AAE5B,MAAM,WAAW;IACtB,OAAO;IACP,aAAa;AACf;AAEe,SAAS,WAAW,EAAE,QAAQ,EAA2B;IACtE,qBACE,8OAAC;QAAK,MAAK;kBACT,cAAA,8OAAC;sBACC,cAAA,8OAAC,6MAAmB;gBAAC,QAAQ;0BAC1B;;;;;;;;;;;;;;;;AAKX"}}]
-}

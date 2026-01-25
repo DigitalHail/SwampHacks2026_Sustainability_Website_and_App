@@ -1,3 +1,4 @@
+import "leaflet/dist/leaflet.css";
 import { ReactNode } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
