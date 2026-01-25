@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -49,18 +50,45 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Powered By banner (moved above slabs) */}
+      <div className="w-full flex justify-center items-center py-12 px-4 md:px-8 relative mt-[-160px]" style={{ zIndex: 2200 }}>
+        <div className="max-w-5xl w-full bg-white rounded-2xl shadow-lg py-10 px-6 text-center" style={{ zIndex: 2200 }}>
+          <p className="text-4xl md:text-5xl font-extrabold text-emerald-900">Powered By</p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-16">
+            <div className="h-40 flex items-center">
+              <Image
+                src="/images/Captial%20One.webp"
+                alt="Capital One"
+                width={520}
+                height={180}
+                className="h-40 w-auto object-contain grayscale opacity-50"
+              />
+            </div>
+            <div className="h-56 flex items-center">
+              <Image
+                src="/images/gemini.png"
+                alt="Gemini"
+                width={680}
+                height={260}
+                className="h-56 w-auto object-contain grayscale opacity-70"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Animated info band + fading box */}
-      <div ref={sectionRef} className="relative px-4 md:px-8" style={{ zIndex: 2000, isolation: 'isolate' }}>
+      <div ref={sectionRef} className="relative px-4 md:px-8 mb-12" style={{ zIndex: 2000, isolation: 'isolate' }}>
         <div
           className={`w-full h-[25vh] flex items-center justify-center rounded-t-2xl transition-opacity duration-1000 ease-in-out relative overflow-hidden ${
             visible ? "opacity-100" : "opacity-0"
           }`}
-          style={{ backgroundColor: '#10b981', zIndex: 2000, position: 'relative' }}
+          style={{ backgroundColor: '#10b981', zIndex: 3000, position: 'relative' }}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white relative" style={{ zIndex: 2000 }}>What is GatorGreen?</h2>
         </div>
 
-        <section className="w-full flex items-center justify-center py-12 relative overflow-hidden rounded-b-2xl" style={{ backgroundColor: '#ffffff', zIndex: 2000, position: 'relative' }}>
+        <section className="w-full flex items-center justify-center py-12 relative overflow-hidden rounded-b-2xl -mt-1" style={{ backgroundColor: '#ffffff', zIndex: 2000, position: 'relative' }}>
           <div className="w-full px-0 relative" style={{ backgroundColor: '#ffffff', zIndex: 2000 }}>
             <FadingBox visible={visible} />
             <Footprints targetRef={sectionRef} />
@@ -77,7 +105,7 @@ function FadingBox({ visible }: { visible: boolean }) {
       className={`mx-auto bg-white rounded-2xl p-8 shadow-xl w-full transition-opacity duration-1000 ease-in-out relative ${
         visible ? "opacity-100 delay-300" : "opacity-0"
       }`}
-      style={{ maxWidth: "100%", zIndex: 2100 }}
+      style={{ maxWidth: "100%", zIndex: 3100 }}
     >
       <p className="text-lg md:text-xl text-emerald-900 leading-relaxed">
         GatorGreen helps you find and track eco-friendly opportunities, learn practical tips, and see your impact over time.
@@ -88,18 +116,37 @@ function FadingBox({ visible }: { visible: boolean }) {
 
 function Footprints({ targetRef }: { targetRef: React.RefObject<HTMLElement | null> }) {
   const [count, setCount] = useState(0);
-  const max = 22;
+  const [behindContent, setBehindContent] = useState(false);
+  const max = 30;
 
   useEffect(() => {
     const onScroll = () => {
-      const el = targetRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
+      // Start showing footprints as soon as user scrolls
+      const scrollY = window.scrollY;
       const vh = window.innerHeight;
-      let progress = (vh - rect.top) / (vh + rect.height);
+      
+      // Check if footer is visible (prevent footprints from showing in footer)
+      const footerElements = document.querySelector("footer");
+      const isNearFooter = footerElements ? footerElements.getBoundingClientRect().top < vh : false;
+      
+      if (isNearFooter) {
+        setCount(0); // Hide all footprints when near footer
+        return;
+      }
+      
+      let progress = scrollY / (vh * 3); // Adjust divisor to control how fast they appear
       progress = Math.max(0, Math.min(1, progress));
       const newCount = Math.round(progress * max);
       setCount(newCount);
+
+      // Determine if footprints should be behind content
+      const el = targetRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const contentTop = rect.top;
+      const contentBottom = rect.bottom;
+      const isInContentZone = contentTop < vh * 0.8 && contentBottom > vh * 0.2;
+      setBehindContent(isInContentZone);
     };
 
     onScroll();
@@ -112,7 +159,7 @@ function Footprints({ targetRef }: { targetRef: React.RefObject<HTMLElement | nu
   }, [targetRef]);
 
   return (
-    <div className="fixed right-8 top-[5vh] flex flex-col gap-4 pointer-events-none" style={{ zIndex: -9999 }}>
+    <div className="fixed right-8 top-[10vh] flex flex-col gap-4 pointer-events-none" style={{ zIndex: -1 }}>
       {Array.from({ length: max }).map((_, i) => {
         const isVisible = i < count;
         const isLeft = i % 2 === 0;
