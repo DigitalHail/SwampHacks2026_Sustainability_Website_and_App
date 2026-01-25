@@ -1,3 +1,5 @@
+let enableIfixitSetting = false;
+
 // Load saved settings when popup opens
 document.addEventListener('DOMContentLoaded', () => {
   // Toggle settings panel
@@ -27,11 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('savingsAccount').value = result.savingsAccount || '';
     document.getElementById('climatiqKey').value = result.climatiqKey || '';
     document.getElementById('carbonBudget').value = result.carbonBudgetKg || '';
-    document.getElementById('enableIfixit').checked = !!result.enableIfixit;
+  enableIfixitSetting = !!result.enableIfixit;
+  document.getElementById('enableIfixit').checked = enableIfixitSetting;
 
     if (result.lastProductAnalysis) {
       displaySustainabilityImpact(result.lastProductAnalysis);
-      displayRepairability(result.lastProductAnalysis.repairability);
+  displayRepairability(result.lastProductAnalysis.repairability, enableIfixitSetting);
       displayBudgetStatus(result.lastProductAnalysis.budgetStatus);
     }
 
@@ -70,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
               if (result.lastProductAnalysis) {
                 console.log("🟢 Retrieved fresh product analysis:", result.lastProductAnalysis);
                 displaySustainabilityImpact(result.lastProductAnalysis);
-                displayRepairability(result.lastProductAnalysis.repairability);
+                displayRepairability(result.lastProductAnalysis.repairability, enableIfixitSetting);
                 displayBudgetStatus(result.lastProductAnalysis.budgetStatus);
               }
             });
@@ -118,20 +121,32 @@ function displaySustainabilityImpact(data) {
   impactSection.style.display = 'block';
 }
 
-function displayRepairability(repairability) {
+function displayRepairability(repairability, enableIfixit) {
   const section = document.getElementById('repairabilitySection');
   const scoreEl = document.getElementById('repairabilityScore');
   const summaryEl = document.getElementById('repairabilitySummary');
   const linkEl = document.getElementById('repairabilityLink');
 
   if (!repairability) {
+    if (enableIfixit) {
+      scoreEl.textContent = 'Repairability score: Checking iFixit...';
+      summaryEl.textContent = 'We have not received repairability data yet.';
+      linkEl.style.display = 'none';
+      section.style.display = 'block';
+      return;
+    }
     section.style.display = 'none';
     return;
   }
 
-  const scoreText = repairability.score !== null && repairability.score !== undefined
-    ? `Repairability score: ${repairability.score}`
-    : 'Repairability score: Not available';
+  let scoreText = 'Repairability score: Not available';
+  if (repairability.score !== null && repairability.score !== undefined) {
+    scoreText = `Repairability score: ${repairability.score}`;
+  } else if (repairability.status === 'not_found') {
+    scoreText = 'Repairability score: Not found';
+  } else if (repairability.status === 'error') {
+    scoreText = 'Repairability score: Lookup failed';
+  }
   scoreEl.textContent = scoreText;
   summaryEl.textContent = repairability.summary || repairability.title || '';
 
@@ -209,7 +224,9 @@ document.getElementById('saveSettings').addEventListener('click', () => {
     carbonBudgetKg: carbonBudgetKg,
     enableIfixit: enableIfixit
   }, () => {
+    enableIfixitSetting = enableIfixit;
     showStatus('✓ Settings saved successfully!', 'success');
+    triggerPageScan();
   });
 });
 
@@ -287,6 +304,19 @@ document.getElementById('checkBalance').addEventListener('click', async () => {
 });
 
 document.getElementById('loadHistory').addEventListener('click', async () => {
+  const section = document.getElementById('purchaseHistorySection');
+  const icon = document.getElementById('historyToggleIcon');
+  const isOpen = section.style.display === 'block';
+
+  if (isOpen) {
+    section.style.display = 'none';
+    icon.textContent = '▼';
+    return;
+  }
+
+  icon.textContent = '▲';
+  section.style.display = 'block';
+
   try {
     const data = await chrome.storage.local.get(['apiKey', 'mainAccount']);
     const apiKey = data.apiKey;
@@ -314,6 +344,16 @@ document.getElementById('loadHistory').addEventListener('click', async () => {
   }
 });
 
+document.getElementById('clearIfixitCache').addEventListener('click', async () => {
+  try {
+    await chrome.storage.local.remove(['ifixitCache', 'lastProductAnalysis']);
+    showStatus('✓ Repairability cache cleared', 'success');
+    triggerPageScan();
+  } catch (error) {
+    showStatus('❌ Error: ' + error.message, 'error');
+  }
+});
+
 function showStatus(message, type) {
   const statusDiv = document.getElementById('settingsStatus');
   statusDiv.innerHTML = `
@@ -329,4 +369,17 @@ function showStatus(message, type) {
       statusDiv.className = '';
     });
   }
+}
+
+function triggerPageScan() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs || !tabs[0]) {
+      return;
+    }
+    chrome.tabs.sendMessage(tabs[0].id, { type: 'SCAN_PAGE' }, () => {
+      if (chrome.runtime.lastError) {
+        console.log("🟡 [WattWise Popup] Scan after save failed:", chrome.runtime.lastError.message);
+      }
+    });
+  });
 }

@@ -48,6 +48,8 @@
     "http://api.nessieisreal.com/*",
     "https://api.nessieisreal.com/*",
     "https://api.climatiq.io/*",
-    "https://www.ifixit.com/api/*"
+    "https://www.ifixit.com/api/*",
+    "https://docs.google.com/*",
+    "https://*.googleusercontent.com/*"
   ]
 }

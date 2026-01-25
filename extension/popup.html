@@ -158,7 +158,10 @@
       <p id="budgetPercent" style="font-size: 12px; margin: 6px 0 0 0;"></p>
     </div>
 
-    <button id="loadHistory">View Purchase History</button>
+    <button id="loadHistory">
+      <span>View Purchase History</span>
+      <span id="historyToggleIcon" style="float: right;">▼</span>
+    </button>
     <div id="purchaseHistorySection" style="display:none; border: 2px solid #455a64; padding: 10px; margin: 10px 0; border-radius: 4px; background-color: #eceff1;">
       <h4>🧾 Recent Purchases</h4>
       <p id="purchaseHistoryMeta" style="font-size: 12px; color: #666;"></p>
@@ -190,6 +193,8 @@
         <input type="checkbox" id="enableIfixit">
         Enable iFixit repairability lookup
       </label>
+      
+      <button id="clearIfixitCache" style="background-color: #607d8b;">Clear Repairability Cache</button>
       
       <button id="saveSettings">Save Settings</button>
       <button id="testAPI">Test API Connection</button>

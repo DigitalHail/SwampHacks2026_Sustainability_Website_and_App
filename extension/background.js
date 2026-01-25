@@ -12,6 +12,8 @@ let CLIMATIQ_API_KEY = "40D52DBM4D1BVC4E7M1GTAEKDR";
 
 // iFixit API for repairability scores (optional)
 const IFIXIT_BASE_URL = "https://www.ifixit.com/api/2.0";
+const IFIXIT_SCORE_CSV_URL = "https://docs.google.com/spreadsheets/d/1R_egXm7iwR0isCt_UxcGtheFEwLj9SNhxC5DWnAqKIc/export?format=csv";
+const IFIXIT_SCORE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 console.log("🟢 [WattWise Background] Service worker loaded!");
 console.log("🔑 [WattWise Background] API Key initialized:", NESSIE_API_KEY.substring(0, 10) + "...");
@@ -293,6 +295,150 @@ function normalizeCacheKey(productName) {
   return productName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function normalizeDeviceName(name) {
+  return name
+    .toLowerCase()
+    .replace(/\b(refurbished|renewed|used|preowned|pre-owned|amazon|certified|unlocked|locked)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseCsvRows(csvText) {
+  const rows = [];
+  let currentRow = [];
+  let currentValue = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i += 1) {
+    const char = csvText[i];
+    const next = csvText[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        currentValue += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      currentRow.push(currentValue.trim());
+      currentValue = "";
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') {
+        i += 1;
+      }
+      currentRow.push(currentValue.trim());
+      if (currentRow.some((value) => value.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentValue = "";
+      continue;
+    }
+
+    currentValue += char;
+  }
+
+  if (currentValue.length || currentRow.length) {
+    currentRow.push(currentValue.trim());
+    if (currentRow.some((value) => value.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  return rows;
+}
+
+async function getRepairabilityScoreTable(cache) {
+  const cachedTable = cache.__scoreTable;
+  if (cachedTable && cachedTable.fetchedAt && cachedTable.entries) {
+    const age = Date.now() - cachedTable.fetchedAt;
+    if (age < IFIXIT_SCORE_CACHE_TTL_MS) {
+      return { entries: cachedTable.entries, cacheMeta: cachedTable };
+    }
+  }
+
+  const response = await fetch(IFIXIT_SCORE_CSV_URL);
+  if (!response.ok) {
+    throw new Error(`Repairability list returned ${response.status}`);
+  }
+  const csv = await response.text();
+  const rows = parseCsvRows(csv);
+  if (rows.length < 2) {
+    throw new Error("Repairability list is empty");
+  }
+
+  const header = rows[0];
+  const deviceIndex = header.indexOf("Device");
+  const scoreIndex = header.indexOf("Score");
+  const oemIndex = header.indexOf("OEM");
+  const dateIndex = header.indexOf("Date");
+
+  if (deviceIndex === -1 || scoreIndex === -1) {
+    throw new Error("Repairability list is missing required columns");
+  }
+
+  const entries = rows.slice(1).reduce((acc, cols) => {
+    const device = cols[deviceIndex];
+    const score = cols[scoreIndex];
+    if (!device || !score) {
+      return acc;
+    }
+    const normalized = normalizeDeviceName(device);
+    if (!normalized) {
+      return acc;
+    }
+    acc.push({
+      device: device,
+      normalized: normalized,
+      score: Number(score),
+      oem: oemIndex >= 0 ? cols[oemIndex] : null,
+      year: dateIndex >= 0 ? cols[dateIndex] : null,
+      url: `https://www.ifixit.com/Device/${encodeURIComponent(device.replace(/\s+/g, "_"))}`
+    });
+    return acc;
+  }, []);
+
+  const cacheMeta = {
+    fetchedAt: Date.now(),
+    entries: entries
+  };
+
+  return { entries: entries, cacheMeta: cacheMeta };
+}
+
+function findBestRepairabilityMatch(productName, entries) {
+  const normalizedProduct = normalizeDeviceName(productName);
+  if (!normalizedProduct || !entries || entries.length === 0) {
+    return null;
+  }
+
+  let best = null;
+  entries.forEach((entry) => {
+    if (!entry.normalized) {
+      return;
+    }
+    const isMatch =
+      normalizedProduct.includes(entry.normalized) ||
+      entry.normalized.includes(normalizedProduct);
+    if (!isMatch) {
+      return;
+    }
+    if (!best || entry.normalized.length > best.normalized.length) {
+      best = entry;
+    }
+  });
+
+  return best;
+}
+
 async function getRepairabilityScore(productName, enableIfixit, cache) {
   if (!enableIfixit) {
     return { data: null, cache: cache };
@@ -303,43 +449,46 @@ async function getRepairabilityScore(productName, enableIfixit, cache) {
   if (cached && cached.cachedAt) {
     const cachedAt = new Date(cached.cachedAt);
     const ageDays = (Date.now() - cachedAt.getTime()) / (1000 * 60 * 60 * 24);
-    if (ageDays <= 30) {
+    const isCurrentSource = cached.source === "iFixit Repairability Scores";
+    if (ageDays <= 30 && isCurrentSource) {
       return { data: cached, cache: cache };
     }
   }
 
   try {
-    const searchUrl = `${IFIXIT_BASE_URL}/search/${encodeURIComponent(productName)}`;
-    const response = await fetch(searchUrl);
-    if (!response.ok) {
-      throw new Error(`iFixit API returned ${response.status}`);
-    }
+    const table = await getRepairabilityScoreTable(cache);
+    const match = findBestRepairabilityMatch(productName, table.entries);
+    const score = match ? match.score : null;
+    const deviceTitle = match ? match.device : productName;
+    const deviceUrl = match ? match.url : null;
 
-    const result = await response.json();
-    const results = Array.isArray(result)
-      ? result
-      : result.results || result.items || result.data || [];
-
-    if (!results.length) {
-      return { data: null, cache: cache };
-    }
-
-    const best = results[0];
-    const score = best.repairability_score || best.score || best.repairability || null;
     const entry = {
       score: score !== null ? Number(score) : null,
-      title: best.title || best.name || productName,
-      url: best.url || best.web_url || null,
-      summary: best.summary || best.description || null,
-      source: "iFixit",
+      title: deviceTitle,
+      url: deviceUrl,
+      summary: match
+        ? `Score from iFixit's smartphone repairability list (Year ${match.year}).`
+        : "No repairability score found in the iFixit list for this device.",
+      source: "iFixit Repairability Scores",
+      status: match ? "ok" : "not_found",
       cachedAt: new Date().toISOString()
     };
 
-    const nextCache = { ...cache, [cacheKey]: entry };
+    const nextCache = { ...cache, [cacheKey]: entry, __scoreTable: table.cacheMeta };
     return { data: entry, cache: nextCache };
   } catch (error) {
     console.warn("⚠️ iFixit lookup failed:", error.message);
-    return { data: null, cache: cache };
+    const entry = {
+      score: null,
+      title: productName,
+      url: null,
+      summary: "Repairability lookup failed. Try again later.",
+      source: "iFixit",
+      status: "error",
+      cachedAt: new Date().toISOString()
+    };
+    const nextCache = { ...cache, [cacheKey]: entry };
+    return { data: entry, cache: nextCache };
   }
 }
 
