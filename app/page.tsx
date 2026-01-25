@@ -51,26 +51,26 @@ export default function HomePage() {
       </div>
 
       {/* Powered By banner (moved above slabs) */}
-      <div className="w-full flex justify-center items-center py-12 px-4 md:px-8 relative mt-[-160px]" style={{ zIndex: 2200 }}>
-        <div className="max-w-5xl w-full bg-white rounded-2xl shadow-lg py-10 px-6 text-center" style={{ zIndex: 2200 }}>
+      <div className="w-full flex justify-center items-center py-6 px-4 md:px-8 relative mt-[-160px]" style={{ zIndex: 2200 }}>
+        <div className="max-w-5xl w-full bg-white rounded-2xl shadow-lg py-0 px-6 text-center overflow-hidden" style={{ zIndex: 2200, maxHeight: '400px' }}>
           <p className="text-4xl md:text-5xl font-extrabold text-emerald-900">Powered By</p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-16">
-            <div className="h-40 flex items-center">
+          <div className="mt-0 flex flex-wrap items-center justify-center gap-4">
+            <div className="h-[480px] flex items-center justify-center mt-4">
               <Image
-                src="/images/Captial%20One.webp"
+                src="/images/Green Capital One.PNG"
                 alt="Capital One"
-                width={520}
-                height={180}
-                className="h-40 w-auto object-contain grayscale opacity-50"
+                width={6250}
+                height={2162}
+                className="h-[480px] w-auto object-contain"
               />
             </div>
-            <div className="h-56 flex items-center">
+            <div className="h-[430px] flex items-center justify-center -mt-72">
               <Image
-                src="/images/gemini.png"
+                src="/images/Green Gemini.PNG"
                 alt="Gemini"
-                width={680}
-                height={260}
-                className="h-56 w-auto object-contain grayscale opacity-70"
+                width={5218}
+                height={1997}
+                className="h-[430px] w-auto object-contain"
               />
             </div>
           </div>

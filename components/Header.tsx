@@ -13,7 +13,7 @@ export default function Header() {
       <div className="w-full px-4 py-1 flex items-center justify-between">
         <div className="flex items-center gap-3 text-2xl font-bold text-emerald-900">
           <Image
-            src="/images/GatorGreen.PNG"
+            src="/images/New GatorGreen.PNG"
             alt="GatorGreen Logo"
             width={64}
             height={80}

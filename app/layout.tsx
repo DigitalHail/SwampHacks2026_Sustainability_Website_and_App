@@ -9,8 +9,8 @@ export const metadata = {
   title: "GatorGreen",
   description: "Environmental opportunities and sustainability platform",
   icons: {
-    icon: { url: "/images/GatorGreen.PNG", sizes: "512x512" },
-    apple: "/images/GatorGreen.PNG",
+    icon: { url: "/images/New GatorGreen.PNG", sizes: "512x512" },
+    apple: "/images/New GatorGreen.PNG",
   },
 };
 
