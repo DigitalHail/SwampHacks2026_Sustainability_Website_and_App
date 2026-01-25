@@ -1780,6 +1780,127 @@ Provide actionable context about what this means for the environment and the con
 }
 
 /**
+ * Detect the product category from the product name
+ * @param {string} productName - Name of the product
+ * @returns {string} Category: "phone", "laptop", "tablet", "charger", "monitor", "headphones", "accessory", or "other"
+ */
+function detectProductCategory(productName) {
+  const lower = productName.toLowerCase();
+  
+  const categories = {
+    phone: ['phone', 'iphone', 'samsung', 'pixel', 'galaxy', 'oneplus', 'motorola', 'nokia', 'realme', 'poco'],
+    laptop: ['laptop', 'macbook', 'chromebook', 'notebook', 'ultrabook', 'thinkpad', 'xps', 'yoga'],
+    tablet: ['tablet', 'ipad', 'kindle', 'surface'],
+    monitor: ['monitor', 'display', 'screen', 'tv', 'television'],
+    charger: ['charger', 'power adapter', 'power supply', 'psu', 'ac adapter'],
+    cable: ['cable', 'cord', 'wire', 'usb', 'hdmi', 'ethernet'],
+    headphones: ['headphone', 'earphone', 'airpod', 'earbud', 'headset', 'speaker', 'earbuds'],
+    keyboard: ['keyboard', 'keycap'],
+    mouse: ['mouse', 'trackpad', 'trackball', 'pointer'],
+    accessory: ['case', 'stand', 'dock', 'hub', 'splitter', 'adapter']
+  };
+  
+  for (const [category, keywords] of Object.entries(categories)) {
+    if (keywords.some(keyword => lower.includes(keyword))) {
+      return category;
+    }
+  }
+  
+  return 'other';
+}
+
+/**
+ * Check if a device is in the same category as target category
+ * @param {string} deviceName - Device name from iFixit
+ * @param {string} targetCategory - Target category
+ * @returns {boolean} True if same category
+ */
+function isSameCategory(deviceName, targetCategory) {
+  const deviceCategory = detectProductCategory(deviceName);
+  return deviceCategory === targetCategory;
+}
+
+/**
+ * Get category-specific instructions for Gemini
+ * @param {string} category - Product category
+ * @param {string} productName - Original product name
+ * @returns {string} Category-specific instructions
+ */
+function getCategorySpecificInstructions(category, productName) {
+  const categoryGuides = {
+    phone: `Since the user is looking at a phone (${productName}), ONLY suggest other phones or smartphones. 
+Consider recommending:
+- Refurbished versions of the same model or newer model
+- Previous generation flagship phones known for durability
+- Phones with high iFixit repairability scores (8+)
+- Sustainable phone brands (Fairphone, etc)`,
+    
+    laptop: `Since the user is looking at a laptop (${productName}), ONLY suggest other laptops/notebooks.
+Consider recommending:
+- Refurbished certified laptops
+- Business-class laptops known for repairability (ThinkPad, etc)
+- Laptops with upgradeable components
+- Lightweight/efficient models to reduce carbon footprint`,
+    
+    tablet: `Since the user is looking at a tablet (${productName}), ONLY suggest other tablets.
+Consider recommending:
+- Refurbished iPad or Android tablets
+- Previous generation tablets that still have good performance
+- Tablets with better repairability scores
+- E-ink tablets (lower power consumption)`,
+    
+    monitor: `Since the user is looking at a monitor/display (${productName}), ONLY suggest other monitors or displays.
+Consider recommending:
+- Refurbished/used monitors in good condition
+- Monitors with better energy efficiency
+- Smaller monitors (less material/energy)
+- Monitors with longer manufacturer support`,
+    
+    charger: `Since the user is looking at a charger (${productName}), ONLY suggest other chargers/power adapters.
+Consider recommending:
+- Multi-port chargers (reduce e-waste)
+- USB-C universal chargers
+- Refurbished or certified chargers
+- More efficient charger models`,
+    
+    cable: `Since the user is looking at a cable/cord (${productName}), ONLY suggest other cables.
+Consider recommending:
+- Universal/multi-use cables (reduce e-waste)
+- High-quality cables that last longer
+- Refurbished high-quality cables
+- Cables with lifetime warranties`,
+    
+    headphones: `Since the user is looking at headphones (${productName}), ONLY suggest other headphones/earbuds.
+Consider recommending:
+- Refurbished premium headphones
+- Headphones with replaceable batteries/parts
+- Used headphones from reputable brands
+- Headphones with high repairability scores`,
+    
+    keyboard: `Since the user is looking at a keyboard (${productName}), ONLY suggest other keyboards.
+Consider recommending:
+- Mechanical keyboards (more durable/repairable)
+- Refurbished keyboards
+- Keyboards with hot-swappable switches
+- Wireless keyboards with good battery life`,
+    
+    mouse: `Since the user is looking at a mouse (${productName}), ONLY suggest other mice.
+Consider recommending:
+- Refurbished/used mice from reliable brands
+- Mice with long battery life
+- Wired mice (eliminate battery waste)
+- Ergonomic mice with better durability`,
+    
+    accessory: `Since the user is looking at an accessory (${productName}), ONLY suggest similar accessories.
+Consider recommending alternatives that reduce overall tech waste.`,
+    
+    other: `Recommend similar products in the same category as ${productName}.`
+  };
+  
+  return categoryGuides[category] || categoryGuides.other;
+}
+
+/**
  * Get green alternatives for a product using Gemini AI
  * Suggests refurbished, used, or sustainably produced alternatives
  */
@@ -1792,42 +1913,71 @@ async function getGreenAlternatives(productName, ifixitCache) {
   try {
     console.log("🌱 Getting green alternatives for:", productName);
     
+    // Detect product category for targeted recommendations
+    const category = detectProductCategory(productName);
+    console.log(`📱 Detected product category: ${category}`);
+    
     // Get the iFixit score table for reference
     let repairableDevices = [];
     try {
       const table = await getRepairabilityScoreTable(ifixitCache || {});
-      // Get top 10 most repairable devices
-      repairableDevices = table.entries
-        .filter(e => e.score >= 7)
+      
+      // Filter repairable devices by category for more relevant suggestions
+      let filteredDevices = table.entries
+        .filter(e => e.score >= 7);
+      
+      // If category is specific, prioritize same-category devices
+      if (category !== "other") {
+        const categoryDevices = filteredDevices.filter(e => 
+          isSameCategory(e.device, category)
+        );
+        if (categoryDevices.length > 0) {
+          filteredDevices = categoryDevices;
+        }
+      }
+      
+      repairableDevices = filteredDevices
         .sort((a, b) => b.score - a.score)
-        .slice(0, 10)
+        .slice(0, 5)
         .map(e => `${e.device} (Score: ${e.score}/10)`);
     } catch (e) {
       console.warn("Could not load iFixit data for alternatives:", e.message);
     }
 
     const ifixitContext = repairableDevices.length > 0
-      ? `Here are some highly repairable devices from iFixit's database: ${repairableDevices.join(", ")}.`
+      ? `Here are some highly repairable ${category} devices from iFixit's database: ${repairableDevices.join(", ")}.`
       : "";
 
-    const prompt = `You are an eco-conscious shopping assistant. Suggest 3-4 greener alternatives to this product.
+    // Build category-specific instructions
+    const categoryInstructions = getCategorySpecificInstructions(category, productName);
+
+    const prompt = `You are an eco-conscious shopping assistant specializing in sustainable tech products. 
+Suggest 3-4 greener alternatives that are in the SAME PRODUCT CATEGORY as the item being viewed.
 
 Product being viewed: ${productName}
+Product Category: ${category}
+
+${categoryInstructions}
 
 ${ifixitContext}
 
+CRITICAL: Recommendations MUST be in the same category as ${productName}. 
+For example, if viewing a phone, recommend other phones (not laptops or tablets).
+If viewing a charger, recommend other chargers.
+
 For each alternative, provide:
-1. A specific product name
+1. A specific product name/model (real or common alternatives)
 2. Type: "refurbished", "used", "sustainable", or "repairable"
-3. A brief reason why it's more eco-friendly (1 sentence)
+3. A brief reason why it's more eco-friendly (1 sentence max)
+4. RepairabilityScore: iFixit score if known, otherwise null
 
-Focus on:
-- Refurbished or certified renewed versions of the same/similar product
-- Used options that extend product lifecycle
-- More repairable alternatives (if applicable, reference iFixit scores)
-- Products from brands known for sustainability
+Prioritize:
+- Refurbished or certified renewed versions of the same model
+- Used/previous generation versions that still work well
+- More repairable alternatives (reference iFixit scores when applicable)
+- Brands/models known for sustainability in this category
 
-Return JSON array format:
+Return ONLY valid JSON array (no markdown):
 [{"name": "Product Name", "type": "refurbished|used|sustainable|repairable", "reason": "Why it's greener", "repairabilityScore": null or number}]`;
 
     console.log("🌱 Calling Gemini for alternatives...");
