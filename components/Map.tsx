@@ -46,6 +46,14 @@ function MapUpdater({ location, onMapClick }: { location: Location | null; onMap
   return null;
 }
 
+function MapRefSetter({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  React.useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
 export function MapComponent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
@@ -54,9 +62,13 @@ export function MapComponent() {
   ]);
   const [pois, setPois] = useState<POI[]>([]);
   const [loadingPOIs, setLoadingPOIs] = useState(false);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(["shop", "amenity"]);
+  const [includeRepair, setIncludeRepair] = useState(true);
+  const [includeVolunteer, setIncludeVolunteer] = useState(true);
   const [isLeafletReady, setIsLeafletReady] = useState(false);
   const mapRef = useRef(null);
+  const [leafletMap, setLeafletMap] = useState<L.Map | null>(null);
+  const [icons, setIcons] = useState<{ default?: L.Icon; repair?: L.Icon; volunteer?: L.Icon }>({});
+  const [listFilter, setListFilter] = useState<'all' | 'repair' | 'volunteer'>('all');
   const { location, error: locationError, loading: locationLoading } = useLocation();
 
   // Client-only Leaflet icon fix to avoid SSR 'window is not defined'.
@@ -73,6 +85,25 @@ export function MapComponent() {
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
         shadowUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      });
+
+      // Create colored icons for categories
+      const shadowUrl = "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png";
+      const makeIcon = (color: "green" | "orange") =>
+        leaflet.icon({
+          iconRetinaUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+          iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
+          shadowUrl,
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41],
+        });
+
+      setIcons({
+        default: leaflet.Icon.Default.prototype as unknown as L.Icon,
+        repair: makeIcon("orange"),
+        volunteer: makeIcon("green"),
       });
       setIsLeafletReady(true);
     })();
@@ -132,18 +163,44 @@ export function MapComponent() {
     setSelectedLocation(newLocation);
   };
 
-  const fetchNearbyPOIs = async (lat: number, lng: number, radius = 1000) => {
+  const filteredPois = React.useMemo(() => {
+    if (listFilter === 'all') return pois;
+    return pois.filter(p => p.category === listFilter);
+  }, [pois, listFilter]);
+
+  const fetchNearbyPOIs = async (lat: number, lng: number, radius = 5000) => {
     setLoadingPOIs(true);
     try {
-      // Build Overpass QL query for nearby places - each category is a separate query part
-      const nodeQueries = selectedCategories.map(cat => `node["${cat}"](around:${radius},${lat},${lng});`).join('\n');
-      const wayQueries = selectedCategories.map(cat => `way["${cat}"](around:${radius},${lat},${lng});`).join('\n');
-      
+      // Build Overpass QL query: only repair shops and volunteer places, within a 4km radius
+      const repairTags = [
+        'shop="car_repair"',
+        'shop="bicycle"',
+        'shop="computer"',
+        'shop="mobile_phone"',
+        'shop="electronics"',
+        'craft="electronics_repair"',
+        'craft="watchmaker"',
+        'craft="shoemaker"'
+      ];
+      const volunteerTags = [
+        'office="charity"',
+        'office="ngo"',
+        'amenity="community_centre"',
+        'amenity="social_facility"'
+      ];
+
+      const makeParts = (tags: string[], kind: 'node'|'way'|'relation') =>
+        tags.map(t => `${kind}[${t}](around:${radius},${lat},${lng});`).join('\n');
+
       const query = `
         [out:json][timeout:25];
         (
-          ${nodeQueries}
-          ${wayQueries}
+          ${includeRepair ? makeParts(repairTags, 'node') : ''}
+          ${includeRepair ? makeParts(repairTags, 'way') : ''}
+          ${includeRepair ? makeParts(repairTags, 'relation') : ''}
+          ${includeVolunteer ? makeParts(volunteerTags, 'node') : ''}
+          ${includeVolunteer ? makeParts(volunteerTags, 'way') : ''}
+          ${includeVolunteer ? makeParts(volunteerTags, 'relation') : ''}
         );
         out center;
       `;
@@ -165,15 +222,35 @@ export function MapComponent() {
           const hasName = el.tags?.name;
           return hasCoords && hasName;
         })
-        .slice(0, 50) // Limit to 50 POIs
-        .map((el: any) => ({
-          id: `${el.type}-${el.id}`,
-          name: el.tags.name,
-          lat: el.lat || el.center?.lat,
-          lng: el.lon || el.center?.lon,
-          type: el.tags.shop || el.tags.amenity || el.tags.building || "place",
-          category: el.tags.shop ? "shop" : el.tags.amenity ? "amenity" : "other",
-        }));
+        .slice(0, 100)
+        .map((el: any) => {
+          const type = el.tags.shop || el.tags.amenity || el.tags.office || el.tags.craft || "place";
+          const isRepair = (
+            el.tags.shop === 'car_repair' ||
+            el.tags.shop === 'bicycle' ||
+            el.tags.shop === 'computer' ||
+            el.tags.shop === 'mobile_phone' ||
+            el.tags.shop === 'electronics' ||
+            el.tags.craft === 'electronics_repair' ||
+            el.tags.craft === 'watchmaker' ||
+            el.tags.craft === 'shoemaker'
+          );
+          const isVolunteer = (
+            el.tags.office === 'charity' ||
+            el.tags.office === 'ngo' ||
+            el.tags.amenity === 'community_centre' ||
+            el.tags.amenity === 'social_facility'
+          );
+          const category = isRepair ? 'repair' : isVolunteer ? 'volunteer' : 'other';
+          return ({
+            id: `${el.type}-${el.id}`,
+            name: el.tags.name,
+            lat: el.lat || el.center?.lat,
+            lng: el.lon || el.center?.lon,
+            type,
+            category,
+          });
+        });
 
       console.log("Parsed POIs:", newPOIs);
       setPois(newPOIs);
@@ -230,15 +307,23 @@ export function MapComponent() {
             Use My Location
           </button>
         </form>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
           <button
             type="button"
             onClick={handleLoadNearbyPlaces}
             disabled={loadingPOIs}
             className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition font-semibold disabled:opacity-50"
           >
-            {loadingPOIs ? "Loading..." : "Load Nearby Places"}
+            {loadingPOIs ? "Loading..." : "Load Repair & Volunteer Places (5km)"}
           </button>
+          <label className="flex items-center gap-1 text-sm text-gray-700">
+            <input type="checkbox" checked={includeRepair} onChange={(e) => setIncludeRepair(e.target.checked)} />
+            Repair
+          </label>
+          <label className="flex items-center gap-1 text-sm text-gray-700">
+            <input type="checkbox" checked={includeVolunteer} onChange={(e) => setIncludeVolunteer(e.target.checked)} />
+            Volunteer
+          </label>
           <span className="text-xs text-gray-600">
             {pois.length > 0 && `${pois.length} places found`}
           </span>
@@ -254,7 +339,7 @@ export function MapComponent() {
       </div>
 
       {/* Map Container */}
-      <div style={{ height: "calc(100vh - 120px)", width: "100%" }}>
+      <div style={{ height: "calc(100vh - 120px)", width: "100%" }} className="relative">
         {!isLeafletReady ? (
           <div className="flex items-center justify-center w-full h-full bg-gray-100">
             <div className="text-gray-600 text-xl">Loading map...</div>
@@ -273,7 +358,7 @@ export function MapComponent() {
             />
 
             {markers.map((marker, idx) => (
-              <Marker key={idx} position={[marker.lat, marker.lng]}>
+              <Marker key={idx} position={[marker.lat, marker.lng]} icon={icons.default}>
                 <Popup>
                   <div className="text-sm">
                     <p className="font-semibold">{marker.name}</p>
@@ -286,7 +371,7 @@ export function MapComponent() {
             ))}
 
             {pois.map((poi) => (
-              <Marker key={poi.id} position={[poi.lat, poi.lng]}>
+              <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={poi.category === 'repair' ? icons.repair : icons.volunteer}>
                 <Popup>
                   <div className="text-sm">
                     <p className="font-semibold">{poi.name}</p>
@@ -294,13 +379,77 @@ export function MapComponent() {
                     <p className="text-gray-500 text-xs">
                       {poi.lat.toFixed(4)}, {poi.lng.toFixed(4)}
                     </p>
+                    <div className="mt-2 flex gap-2">
+                      <a
+                        className="text-xs text-blue-600 hover:underline"
+                        href={`https://www.google.com/maps?q=${poi.lat},${poi.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open in Google Maps
+                      </a>
+                      <a
+                        className="text-xs text-blue-600 hover:underline"
+                        href={`https://maps.apple.com/?ll=${poi.lat},${poi.lng}&q=${encodeURIComponent(poi.name)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open in Apple Maps
+                      </a>
+                    </div>
                   </div>
                 </Popup>
               </Marker>
             ))}
 
             <MapUpdater location={selectedLocation} onMapClick={handleMapClick} />
+            <MapRefSetter onReady={(m) => setLeafletMap(m)} />
           </MapContainer>
+        )}
+        {/* Sidebar list of places (overlayed above map) */}
+        {pois.length > 0 && (
+          <div className="absolute left-4 top-28 z-[1000] w-80 max-h-[60vh] overflow-y-auto bg-white/95 backdrop-blur rounded-lg shadow-lg border p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-emerald-800">Nearby Repair & Volunteer</h3>
+              <span className="text-xs text-gray-600">{filteredPois.length} shown</span>
+            </div>
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                className={`text-xs px-2 py-1 rounded border ${listFilter === 'all' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}`}
+                onClick={() => setListFilter('all')}
+              >
+                All
+              </button>
+              <button
+                className={`text-xs px-2 py-1 rounded border ${listFilter === 'repair' ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-orange-700 border-orange-300 hover:bg-orange-50'}`}
+                onClick={() => setListFilter('repair')}
+              >
+                Repair
+              </button>
+              <button
+                className={`text-xs px-2 py-1 rounded border ${listFilter === 'volunteer' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-300 hover:bg-green-50'}`}
+                onClick={() => setListFilter('volunteer')}
+              >
+                Volunteer
+              </button>
+            </div>
+            <ul className="space-y-2">
+              {filteredPois.map((poi) => (
+                <li key={poi.id} className="text-sm flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold">{poi.name}</div>
+                    <div className="text-xs text-gray-600 capitalize">{poi.category} • {poi.type}</div>
+                  </div>
+                  <button
+                    className={`text-xs px-2 py-1 rounded text-white ${poi.category === 'repair' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}
+                    onClick={() => leafletMap?.setView([poi.lat, poi.lng], 16)}
+                  >
+                    Zoom
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
     </div>
