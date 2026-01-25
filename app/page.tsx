@@ -26,10 +26,10 @@ export default function HomePage() {
   }, []);
 
   return (
-    <main className="flex flex-col min-h-screen bg-white relative z-10">
+    <main className="flex flex-col min-h-screen bg-white relative z-[100]">
       {/* Hero */}
-      <div className="w-full max-w-7xl h-screen mx-auto flex items-center justify-center">
-        <div className="mx-4 md:mx-8 rounded-3xl bg-emerald-50/95 shadow-xl p-10 md:p-20 lg:p-32 text-center w-full">
+      <div className="w-full max-w-7xl h-screen mx-auto flex items-center justify-center relative z-[100]">
+        <div className="mx-4 md:mx-8 rounded-3xl bg-emerald-50/95 shadow-xl p-10 md:p-20 lg:p-32 text-center w-full relative z-[100]">
           <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold mb-6 text-emerald-900">GatorGreen</h1>
           <p className="text-2xl md:text-3xl lg:text-4xl font-extrabold mb-8 leading-tight text-emerald-600">
             Environmental opportunities and sustainability platform
@@ -50,17 +50,17 @@ export default function HomePage() {
       </div>
 
       {/* Animated info band + fading box */}
-      <div ref={sectionRef}>
+      <div ref={sectionRef} className="relative z-[150] overflow-hidden">
         <div
-          className={`w-full h-[25vh] flex items-center justify-center rounded-t-2xl transition-opacity duration-1000 ease-in-out relative z-20 ${
-            visible ? "bg-emerald-600 opacity-100" : "bg-emerald-600 opacity-0"
+          className={`w-full h-[25vh] flex items-center justify-center rounded-t-2xl transition-opacity duration-1000 ease-in-out relative z-[150] bg-emerald-600 ${
+            visible ? "opacity-100" : "opacity-0"
           }`}
         >
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white">What is GatorGreen?</h2>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white relative z-[150]">What is GatorGreen?</h2>
         </div>
 
-        <section className="w-full flex items-center justify-center py-12">
-          <div className="w-full px-0">
+        <section className="w-full flex items-center justify-center py-12 relative z-[150] bg-white">
+          <div className="w-full px-0 relative z-[150] bg-white">
             <FadingBox visible={visible} />
             <Footprints targetRef={sectionRef} />
           </div>
@@ -73,7 +73,7 @@ export default function HomePage() {
 function FadingBox({ visible }: { visible: boolean }) {
   return (
     <div
-      className={`mx-auto bg-white rounded-2xl p-8 shadow-xl w-full transition-opacity duration-1000 ease-in-out relative z-20 ${
+      className={`mx-auto bg-white rounded-2xl p-8 shadow-xl w-full transition-opacity duration-1000 ease-in-out relative z-[200] ${
         visible ? "opacity-100 delay-300" : "opacity-0"
       }`}
       style={{ maxWidth: "100%" }}
@@ -111,7 +111,7 @@ function Footprints({ targetRef }: { targetRef: React.RefObject<HTMLElement | nu
   }, [targetRef]);
 
   return (
-    <div className="fixed right-8 top-24 flex flex-col gap-4 z-0 pointer-events-none">
+    <div className="fixed right-8 top-28 flex flex-col gap-4 pointer-events-none" style={{ zIndex: -9999 }}>
       {Array.from({ length: max }).map((_, i) => {
         const isVisible = i < count;
         const isLeft = i % 2 === 0;

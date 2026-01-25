@@ -1,5 +1,6 @@
 import "leaflet/dist/leaflet.css";
 import type { ReactNode } from "react";
+import Footer from "../components/Footer";
 import Header from "../components/Header";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -12,10 +13,11 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>
+      <body className="flex flex-col min-h-screen">
         <Providers>
           <Header />
           {children}
+          <Footer />
         </Providers>
       </body>
     </html>
