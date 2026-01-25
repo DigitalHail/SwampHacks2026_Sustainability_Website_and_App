@@ -54,31 +54,52 @@ document.addEventListener('DOMContentLoaded', () => {
       const tabId = tabs[0].id;
       const tabUrl = tabs[0].url;
       console.log("🔵 [WattWise Popup] Scanning page:", tabUrl, "Tab ID:", tabId);
+      document.getElementById('status').textContent = '🔄 Scanning page...';
+      let didRespond = false;
+      const scanTimeout = setTimeout(() => {
+        if (!didRespond) {
+          console.log("🟡 [WattWise Popup] Scan timed out");
+          document.getElementById('status').textContent = '⚠️ Could not scan page';
+          hideAnalysisSections();
+        }
+      }, 2000);
       
       chrome.tabs.sendMessage(tabId, {type: 'SCAN_PAGE'}, (response) => {
+        didRespond = true;
+        clearTimeout(scanTimeout);
         if (chrome.runtime.lastError) {
           console.log("🟡 [WattWise Popup] Content script not loaded. Error:", chrome.runtime.lastError.message);
           console.log("🟡 [WattWise Popup] This likely means the content script hasn't injected yet");
-          document.getElementById('status').textContent = '🔄 Scanning page...';
+          document.getElementById('status').textContent = '⚠️ Page not supported';
+          hideAnalysisSections();
           return;
         }
-        if (response) {
-          console.log("🟢 [WattWise Popup] Scan response:", response);
-          document.getElementById('status').textContent = response.message || 'Page scanned';
-          
-          // Always request fresh analysis from storage after a small delay
-          // to give content script time to update it
-          setTimeout(() => {
-            chrome.storage.local.get(['lastProductAnalysis'], (result) => {
-              if (result.lastProductAnalysis) {
-                console.log("🟢 Retrieved fresh product analysis:", result.lastProductAnalysis);
-                displaySustainabilityImpact(result.lastProductAnalysis);
-                displayRepairability(result.lastProductAnalysis.repairability, enableIfixitSetting);
-                displayBudgetStatus(result.lastProductAnalysis.budgetStatus);
-              }
-            });
-          }, 500);
+        if (!response) {
+          console.log("� [WattWise Popup] No response from content script");
+          document.getElementById('status').textContent = '⚠️ Unable to detect product';
+          hideAnalysisSections();
+          return;
         }
+
+        console.log("�🟢 [WattWise Popup] Scan response:", response);
+        document.getElementById('status').textContent = response.message || 'Page scanned';
+        if (!response.success) {
+          hideAnalysisSections();
+          return;
+        }
+        
+        // Always request fresh analysis from storage after a small delay
+        // to give content script time to update it
+        setTimeout(() => {
+          chrome.storage.local.get(['lastProductAnalysis'], (result) => {
+            if (result.lastProductAnalysis) {
+              console.log("🟢 Retrieved fresh product analysis:", result.lastProductAnalysis);
+              displaySustainabilityImpact(result.lastProductAnalysis);
+              displayRepairability(result.lastProductAnalysis.repairability, enableIfixitSetting);
+              displayBudgetStatus(result.lastProductAnalysis.budgetStatus);
+            }
+          });
+        }, 500);
       });
     }
   });
@@ -119,6 +140,22 @@ function displaySustainabilityImpact(data) {
   }
   
   impactSection.style.display = 'block';
+}
+
+function hideAnalysisSections() {
+  const impactSection = document.getElementById('impactSection');
+  const repairSection = document.getElementById('repairabilitySection');
+  const budgetSection = document.getElementById('budgetSection');
+
+  if (impactSection) {
+    impactSection.style.display = 'none';
+  }
+  if (repairSection) {
+    repairSection.style.display = 'none';
+  }
+  if (budgetSection) {
+    budgetSection.style.display = 'none';
+  }
 }
 
 function displayRepairability(repairability, enableIfixit) {
@@ -229,6 +266,7 @@ document.getElementById('saveSettings').addEventListener('click', () => {
     triggerPageScan();
   });
 });
+
 
 // Test API button
 document.getElementById('testAPI').addEventListener('click', () => {
