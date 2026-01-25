@@ -16,7 +16,23 @@ let GEMINI_API_KEY = "";
 
 // iFixit API for repairability scores (optional)
 const IFIXIT_BASE_URL = "https://www.ifixit.com/api/2.0";
-const IFIXIT_SCORE_CSV_URL = "https://docs.google.com/spreadsheets/d/1R_egXm7iwR0isCt_UxcGtheFEwLj9SNhxC5DWnAqKIc/export?format=csv";
+// Google Sheets with multiple device category tabs (gid parameter specifies sheet)
+const IFIXIT_SCORE_SHEET_ID = "1R_egXm7iwR0isCt_UxcGtheFEwLj9SNhxC5DWnAqKIc";
+// Sheet tabs by device category (tab ID -> category name)
+const IFIXIT_SHEET_TABS = {
+  "0": "phones",        // Default sheet or Sheet1
+  "1": "laptops",       // Sheet2
+  "2": "tablets",       // Sheet3
+  "3": "monitors",      // Sheet4
+  "4": "headphones",    // Sheet5
+  "5": "smartwatches",  // Sheet6
+  "6": "other"          // Additional sheets as needed
+};
+// Build individual URLs for each sheet (gid parameter = sheet tab ID)
+const IFIXIT_SCORE_CSV_URLS = Object.entries(IFIXIT_SHEET_TABS).reduce((acc, [gid, category]) => {
+  acc[category] = `https://docs.google.com/spreadsheets/d/${IFIXIT_SCORE_SHEET_ID}/export?format=csv&gid=${gid}`;
+  return acc;
+}, {});
 const IFIXIT_SCORE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 // ============================================
@@ -1323,68 +1339,161 @@ function parseCsvRows(csvText) {
   return rows;
 }
 
-async function getRepairabilityScoreTable(cache) {
-  const cachedTable = cache.__scoreTable;
+/**
+ * Fetch and parse repairability scores from a specific Google Sheets tab
+ * @param {string} category - Device category (phones, laptops, tablets, etc)
+ * @param {object} cache - Cache object with fetched data
+ * @returns {Promise<object>} { entries: [...], cacheMeta: {...} }
+ */
+async function getRepairabilityScoreTable(cache, category = "phones") {
+  const cacheKey = `__scoreTable_${category}`;
+  const cachedTable = cache[cacheKey];
+  
   if (cachedTable && cachedTable.fetchedAt && cachedTable.entries) {
     const age = Date.now() - cachedTable.fetchedAt;
     if (age < IFIXIT_SCORE_CACHE_TTL_MS) {
-      return { entries: cachedTable.entries, cacheMeta: cachedTable };
+      console.log(`📋 Using cached ${category} repairability data (${cachedTable.entries.length} devices)`);
+      return { entries: cachedTable.entries, cacheMeta: cachedTable, category: category };
     }
   }
 
-  const response = await fetch(IFIXIT_SCORE_CSV_URL);
-  if (!response.ok) {
-    throw new Error(`Repairability list returned ${response.status}`);
-  }
-  const csv = await response.text();
-  const rows = parseCsvRows(csv);
-  if (rows.length < 2) {
-    throw new Error("Repairability list is empty");
-  }
-
-  const header = rows[0];
-  const deviceIndex = header.indexOf("Device");
-  const scoreIndex = header.indexOf("Score");
-  const oemIndex = header.indexOf("OEM");
-  const dateIndex = header.indexOf("Date");
-
-  if (deviceIndex === -1 || scoreIndex === -1) {
-    throw new Error("Repairability list is missing required columns");
-  }
-
-  const entries = rows.slice(1).reduce((acc, cols) => {
-    const device = cols[deviceIndex];
-    const score = cols[scoreIndex];
-    if (!device || !score) {
-      return acc;
-    }
-    const normalized = normalizeDeviceName(device);
-    if (!normalized) {
-      return acc;
+  // Get the CSV URL for this category
+  const csvUrl = IFIXIT_SCORE_CSV_URLS[category] || IFIXIT_SCORE_CSV_URLS["other"];
+  console.log(`📥 Fetching ${category} repairability scores from sheet...`);
+  
+  try {
+    const response = await fetch(csvUrl);
+    if (!response.ok) {
+      console.warn(`⚠️ Failed to fetch ${category} sheet (${response.status}), trying fallback`);
+      throw new Error(`Repairability ${category} sheet returned ${response.status}`);
     }
     
-    // Build iFixit Device page URL with underscores replacing spaces
-    // Example: "iPhone 15 Pro Max" → "https://www.ifixit.com/Device/iPhone_15_Pro_Max"
-    const deviceSlug = device.trim().replace(/\s+/g, "_");
-    const deviceUrl = `https://www.ifixit.com/Device/${deviceSlug}`;
+    const csv = await response.text();
+    const rows = parseCsvRows(csv);
     
-    acc.push({
-      device: device,
-      normalized: normalized,
-      score: Number(score),
-      oem: oemIndex >= 0 ? cols[oemIndex] : null,
-      year: dateIndex >= 0 ? cols[dateIndex] : null,
-      url: deviceUrl
-    });
-    return acc;
-  }, []);
+    if (rows.length < 2) {
+      console.warn(`⚠️ ${category} sheet is empty or too small (${rows.length} rows)`);
+      throw new Error(`Repairability ${category} sheet is empty`);
+    }
 
-  const cacheMeta = {
-    fetchedAt: Date.now(),
-    entries: entries
+    const header = rows[0];
+    const deviceIndex = header.indexOf("Device");
+    const scoreIndex = header.indexOf("Score");
+    const oemIndex = header.indexOf("OEM");
+    const dateIndex = header.indexOf("Date");
+
+    if (deviceIndex === -1 || scoreIndex === -1) {
+      console.error(`❌ ${category} sheet missing required columns. Headers: ${header.join(", ")}`);
+      throw new Error(`${category} sheet missing Device or Score column`);
+    }
+
+    const entries = rows.slice(1).reduce((acc, cols) => {
+      const device = cols[deviceIndex];
+      const score = cols[scoreIndex];
+      if (!device || !score) {
+        return acc;
+      }
+      const normalized = normalizeDeviceName(device);
+      if (!normalized) {
+        return acc;
+      }
+      
+      // Build iFixit Device page URL with underscores replacing spaces
+      // Example: "iPhone 15 Pro Max" → "https://www.ifixit.com/Device/iPhone_15_Pro_Max"
+      const deviceSlug = device.trim().replace(/\s+/g, "_");
+      const deviceUrl = `https://www.ifixit.com/Device/${deviceSlug}`;
+      
+      acc.push({
+        device: device,
+        category: category,
+        normalized: normalized,
+        score: Number(score),
+        oem: oemIndex >= 0 ? cols[oemIndex] : null,
+        year: dateIndex >= 0 ? cols[dateIndex] : null,
+        url: deviceUrl
+      });
+      return acc;
+    }, []);
+
+    console.log(`✅ Loaded ${entries.length} ${category} devices from iFixit`);
+
+    const cacheMeta = {
+      fetchedAt: Date.now(),
+      entries: entries,
+      category: category
+    };
+
+    return { entries: entries, cacheMeta: cacheMeta, category: category };
+  } catch (error) {
+    console.error(`🔴 Error loading ${category} repairability data:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Load repairability data for multiple device categories
+ * Useful for getting alternative suggestions across categories
+ * @param {object} cache - Cache object
+ * @param {array} categories - List of categories to load (default: all)
+ * @returns {Promise<object>} Merged entries with category info
+ */
+async function getRepairabilityScoreTableMultiCategory(cache, categories = null) {
+  const categoriesToLoad = categories || Object.values(IFIXIT_SHEET_TABS);
+  const allEntries = {};
+
+  for (const category of categoriesToLoad) {
+    try {
+      const result = await getRepairabilityScoreTable(cache, category);
+      allEntries[category] = result.entries;
+    } catch (error) {
+      console.warn(`⚠️ Failed to load ${category} category:`, error.message);
+      allEntries[category] = [];
+    }
+  }
+
+  return allEntries;
+}
+
+/**
+ * Get repairability entries for a specific product category
+ * Falls back to loading all categories if specific one not available
+ * @param {string} productCategory - Target category (phone, laptop, etc)
+ * @param {object} cache - Cache object
+ * @returns {Promise<array>} Array of entries for category
+ */
+async function getRepairabilityEntriesByCategory(productCategory, cache) {
+  // Map product category to iFixit sheet category
+  const categoryMap = {
+    phone: "phones",
+    laptop: "laptops",
+    tablet: "tablets",
+    monitor: "monitors",
+    headphones: "headphones",
+    smartwatch: "smartwatches",
+    charger: "other",
+    cable: "other",
+    keyboard: "other",
+    mouse: "other",
+    accessory: "other",
+    other: "other"
   };
 
-  return { entries: entries, cacheMeta: cacheMeta };
+  const sheetCategory = categoryMap[productCategory] || "other";
+  
+  try {
+    const result = await getRepairabilityScoreTable(cache, sheetCategory);
+    return result.entries;
+  } catch (error) {
+    console.warn(`⚠️ Failed to load ${sheetCategory}, trying all categories...`);
+    // Fallback: try to load from default sheet
+    try {
+      const result = await getRepairabilityScoreTable(cache, "phones");
+      return result.entries;
+    } catch (fallbackError) {
+      console.error("🔴 Could not load any repairability data:", fallbackError.message);
+      return [];
+    }
+  }
 }
 
 function findBestRepairabilityMatch(productName, entries) {
@@ -1463,8 +1572,13 @@ async function getRepairabilityScore(productName, enableIfixit, cache) {
   }
 
   try {
-    const table = await getRepairabilityScoreTable(cache);
-    const match = findBestRepairabilityMatch(productName, table.entries);
+    // Detect the product category for targeted sheet lookup
+    const category = detectProductCategory(productName);
+    console.log(`🛠️ Detected product category: ${category} - using targeted iFixit sheet`);
+    
+    // Load the specific category sheet for more relevant matches
+    const entries = await getRepairabilityEntriesByCategory(category, cache);
+    const match = findBestRepairabilityMatch(productName, entries);
     const score = match ? match.score : null;
     const deviceTitle = match ? match.device : productName;
     const deviceUrl = match ? match.url : null;
@@ -1474,14 +1588,16 @@ async function getRepairabilityScore(productName, enableIfixit, cache) {
       title: deviceTitle,
       url: deviceUrl,
       summary: match
-        ? `Score from iFixit's smartphone repairability list (Year ${match.year}).`
-        : "No repairability score found in the iFixit list for this device.",
+        ? `Score from iFixit's ${category} repairability list (Year ${match.year}).`
+        : `No repairability score found in the iFixit ${category} list for this device.`,
       source: "iFixit Repairability Scores",
       status: match ? "ok" : "not_found",
+      category: category,
       cachedAt: new Date().toISOString()
     };
 
-    const nextCache = { ...cache, [cacheKey]: entry, __scoreTable: table.cacheMeta };
+    // Update cache with both individual entry and category sheet metadata
+    const nextCache = { ...cache, [cacheKey]: entry };
     return { data: entry, cache: nextCache };
   } catch (error) {
     console.warn("⚠️ iFixit lookup failed:", error.message);
@@ -1917,23 +2033,24 @@ async function getGreenAlternatives(productName, ifixitCache) {
     const category = detectProductCategory(productName);
     console.log(`📱 Detected product category: ${category}`);
     
-    // Get the iFixit score table for reference
+    // Get the iFixit repairability scores for this category
     let repairableDevices = [];
     try {
-      const table = await getRepairabilityScoreTable(ifixitCache || {});
+      // Load entries from the appropriate category sheet
+      const entries = await getRepairabilityEntriesByCategory(category, ifixitCache || {});
       
-      // Filter repairable devices by category for more relevant suggestions
-      let filteredDevices = table.entries
+      // Filter for highly repairable devices (score 7+)
+      let filteredDevices = entries
         .filter(e => e.score >= 7);
       
-      // If category is specific, prioritize same-category devices
-      if (category !== "other") {
-        const categoryDevices = filteredDevices.filter(e => 
-          isSameCategory(e.device, category)
-        );
-        if (categoryDevices.length > 0) {
-          filteredDevices = categoryDevices;
-        }
+      // If we got results from category sheet, use them; otherwise fallback to all categories
+      if (filteredDevices.length === 0 && category !== "other") {
+        console.warn(`⚠️ No highly repairable devices in ${category}, trying all categories...`);
+        // Try to load multiple categories for better suggestions
+        const multiCat = await getRepairabilityScoreTableMultiCategory(ifixitCache || {});
+        filteredDevices = Object.values(multiCat)
+          .flat()
+          .filter(e => e.score >= 7);
       }
       
       repairableDevices = filteredDevices
